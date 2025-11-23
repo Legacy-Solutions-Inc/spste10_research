@@ -1,0 +1,29 @@
+{
+  "extends": "./packages/config/tsconfig.base.json",
+  "compilerOptions": {
+    "paths": {
+      "@repo/types": ["./packages/types/src"],
+      "@repo/core": ["./packages/core/src"],
+      "@repo/config": ["./packages/config"]
+    }
+  },
+  "files": [],
+  "references": [
+    {
+      "path": "./apps/web"
+    },
+    {
+      "path": "./apps/mobile"
+    },
+    {
+      "path": "./packages/types"
+    },
+    {
+      "path": "./packages/core"
+    },
+    {
+      "path": "./packages/config"
+    }
+  ]
+}
+
