@@ -1,0 +1,8 @@
+# Supabase Migrations
+# 
+# Create migration files here using:
+# npx supabase migration new <migration_name>
+#
+# Or if using Supabase CLI locally:
+# supabase migration new <migration_name>
+
