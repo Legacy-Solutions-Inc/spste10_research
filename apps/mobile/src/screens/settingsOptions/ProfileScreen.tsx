@@ -1,0 +1,234 @@
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  TextInput,
+  ScrollView,
+  Image,
+  Alert,
+} from "react-native";
+import { useState } from "react";
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import * as ImagePicker from "expo-image-picker";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import type { RootStackParamList } from "@/navigation/types";
+
+type ProfileNavigation = NativeStackNavigationProp<
+  RootStackParamList,
+  "Profile"
+>;
+
+export function ProfileScreen() {
+  const navigation = useNavigation<ProfileNavigation>();
+  const [profileImage, setProfileImage] = useState<string | null>(null);
+  const [formData, setFormData] = useState({
+    firstName: "",
+    lastName: "",
+    address: "",
+    birthday: "",
+    age: "",
+    bloodType: "",
+    gender: "",
+    email: "",
+  });
+
+  // Check if required fields are filled (for enabling SAVE button)
+  const isFormValid = () => {
+    return (
+      formData.firstName.trim() !== "" &&
+      formData.lastName.trim() !== "" &&
+      formData.email.trim() !== ""
+    );
+  };
+
+  const handleAddPhoto = async () => {
+    try {
+      // Request media library permissions
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert(
+          "Permission Required",
+          "Please grant permission to access your photos."
+        );
+        return;
+      }
+
+      // Launch image picker
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        setProfileImage(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error("Error picking image:", error);
+      Alert.alert("Error", "Failed to pick image");
+    }
+  };
+
+  const handleSave = () => {
+    if (!isFormValid()) {
+      Alert.alert("Validation Error", "Please fill in all required fields.");
+      return;
+    }
+
+    // In a real app, save to backend/database
+    console.log("Saving profile:", { ...formData, profileImage });
+    Alert.alert("Success", "Profile saved successfully!");
+    // Optionally navigate back
+    // navigation.goBack();
+  };
+
+  const updateField = (field: keyof typeof formData, value: string) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  return (
+    <ScrollView className="flex-1 bg-white">
+      {/* Header */}
+      <View className="flex-row items-center px-4 pt-20 pb-4">
+        <TouchableOpacity
+          onPress={() => navigation.navigate("Settings1")}
+          className="h-12 w-12 rounded-full bg-blue-900 items-center justify-center mr-4"
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          activeOpacity={0.7}
+        >
+          <MaterialCommunityIcons name="arrow-left" size={24} color="white" />
+        </TouchableOpacity>
+        <Text className="text-xl font-bold text-blue-900 flex-1 text-center -ml-14">
+          Profile
+        </Text>
+      </View>
+
+      {/* Profile Picture Section */}
+      <View className="items-center mt-6 mb-6">
+        <View className="h-32 w-32 rounded-full border-2 border-gray-300 items-center justify-center overflow-hidden bg-gray-100">
+          {profileImage ? (
+            <Image
+              source={{ uri: profileImage }}
+              className="h-full w-full"
+              resizeMode="cover"
+            />
+          ) : (
+            <MaterialCommunityIcons
+              name="account"
+              size={64}
+              color="#9CA3AF"
+            />
+          )}
+        </View>
+        <TouchableOpacity
+          onPress={handleAddPhoto}
+          className="bg-blue-900 rounded-full py-1 px-4 mt-3"
+          activeOpacity={0.8}
+        >
+          <Text className="text-white font-semibold text-sm">Add Photo</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Form Fields */}
+      <View className="px-4 pb-8">
+        {/* First Name */}
+        <TextInput
+          placeholder="First name"
+          placeholderTextColor="#93C5FD"
+          value={formData.firstName}
+          onChangeText={(value) => updateField("firstName", value)}
+          className="border border-blue-300 rounded-lg px-4 py-2 text-sm mt-2 text-gray-900"
+        />
+
+        {/* Last Name */}
+        <TextInput
+          placeholder="Last name"
+          placeholderTextColor="#93C5FD"
+          value={formData.lastName}
+          onChangeText={(value) => updateField("lastName", value)}
+          className="border border-blue-300 rounded-lg px-4 py-2 text-sm mt-2 text-gray-900"
+        />
+
+        {/* Address */}
+        <TextInput
+          placeholder="Address"
+          placeholderTextColor="#93C5FD"
+          value={formData.address}
+          onChangeText={(value) => updateField("address", value)}
+          className="border border-blue-300 rounded-lg px-4 py-2 text-sm mt-2 text-gray-900"
+        />
+
+        {/* Birthday */}
+        <TextInput
+          placeholder="Birthday"
+          placeholderTextColor="#93C5FD"
+          value={formData.birthday}
+          onChangeText={(value) => updateField("birthday", value)}
+          className="border border-blue-300 rounded-lg px-4 py-2 text-sm mt-2 text-gray-900"
+        />
+
+        {/* Age */}
+        <TextInput
+          placeholder="Age"
+          placeholderTextColor="#93C5FD"
+          value={formData.age}
+          onChangeText={(value) => updateField("age", value)}
+          keyboardType="numeric"
+          className="border border-blue-300 rounded-lg px-4 py-2 text-sm mt-2 text-gray-900"
+        />
+
+        {/* Blood Type */}
+        <TextInput
+          placeholder="Blood Type"
+          placeholderTextColor="#93C5FD"
+          value={formData.bloodType}
+          onChangeText={(value) => updateField("bloodType", value)}
+          className="border border-blue-300 rounded-lg px-4 py-2 text-sm mt-2 text-gray-900"
+        />
+
+        {/* Gender */}
+        <TextInput
+          placeholder="Gender"
+          placeholderTextColor="#93C5FD"
+          value={formData.gender}
+          onChangeText={(value) => updateField("gender", value)}
+          className="border border-blue-300 rounded-lg px-4 py-2 text-sm mt-2 text-gray-900"
+        />
+
+        {/* Email */}
+        <TextInput
+          placeholder="Email"
+          placeholderTextColor="#93C5FD"
+          value={formData.email}
+          onChangeText={(value) => updateField("email", value)}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          className="border border-blue-300 rounded-lg px-4 py-2 text-sm mt-2 text-gray-900"
+        />
+
+        {/* Save Button */}
+        <TouchableOpacity
+          onPress={handleSave}
+          disabled={!isFormValid()}
+          className={`rounded-full px-6 py-2 self-end mt-4 ${
+            isFormValid()
+              ? "bg-blue-900"
+              : "bg-blue-100"
+          }`}
+          activeOpacity={isFormValid() ? 0.8 : 1}
+        >
+          <Text
+            className={`font-bold text-base ${
+              isFormValid() ? "text-white" : "text-blue-300"
+            }`}
+          >
+            SAVE
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </ScrollView>
+  );
+}
+
