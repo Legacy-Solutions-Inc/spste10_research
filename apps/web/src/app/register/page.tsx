@@ -1,14 +1,13 @@
 import { createClient } from "@/lib/supabaseServer";
 import { redirect } from "next/navigation";
-import Link from "next/link";
-import LoginForm from "./LoginForm";
+import RegisterForm from "./RegisterForm";
 
 export const metadata = {
-  title: "AGAP - Log In",
-  description: "Log in to your AGAP account",
+  title: "AGAP - Create Account",
+  description: "Create a new AGAP account",
 };
 
-export default async function LoginPage() {
+export default async function RegisterPage() {
   const supabase = createClient();
   const {
     data: { session },
@@ -24,13 +23,7 @@ export default async function LoginPage() {
         <h1 className="text-4xl font-extrabold text-blue-900 text-center mb-6">
           AGAP
         </h1>
-        <LoginForm />
-        <Link
-          href="/forgot-password"
-          className="text-blue-900 text-sm hover:underline mt-2"
-        >
-          Forgot password?
-        </Link>
+        <RegisterForm />
       </div>
     </main>
   );
