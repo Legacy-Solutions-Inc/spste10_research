@@ -17,9 +17,13 @@
     "@repo/core": "workspace:*",
     "@repo/types": "workspace:*",
     "@supabase/supabase-js": "^2.39.0",
-    "expo": "~54.0.0",
-    "expo-constants": "^18.0.10",
-    "expo-status-bar": "~3.0.8",
+    "@expo/vector-icons": "^14.0.0",
+    "expo": "~54.0.31",
+    "expo-camera": "~16.0.7",
+    "expo-constants": "~18.0.13",
+    "expo-image-picker": "~16.0.2",
+    "expo-location": "~18.0.4",
+    "expo-status-bar": "~3.0.9",
     "nativewind": "^4.2.1",
     "react": "19.1.0",
     "react-native": "0.81.5",
@@ -27,12 +31,13 @@
     "react-native-reanimated": "^4.1.5",
     "react-native-safe-area-context": "5.6.2",
     "react-native-screens": "~4.16.0",
-    "react-native-svg": "^15.15.0"
+    "react-native-svg": "15.12.1"
   },
   "devDependencies": {
     "@babel/core": "^7.23.7",
     "@repo/config": "workspace:*",
-    "@types/react": "~19.1.17",
+    "@types/react": "~19.1.10",
+    "babel-preset-expo": "~54.0.9",
     "tailwindcss": "3.4.1",
     "typescript": "^5.3.3"
   },
