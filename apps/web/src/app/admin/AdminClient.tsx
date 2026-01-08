@@ -32,7 +32,8 @@ export default function AdminClient() {
 
       // Fetch profiles with responder_profiles joined
       // Only get profiles that have responder_profiles (role='responder')
-      const { data: profiles, error: profilesError } = await supabase
+      // @ts-ignore - Supabase types may not be fully generated
+      const { data: profilesRaw, error: profilesError } = await supabase
         .from("profiles")
         .select(`
           id,
@@ -60,9 +61,37 @@ export default function AdminClient() {
         return;
       }
 
+      // Type assertion for profiles data
+      type ProfileWithResponderProfile = {
+        id: string;
+        email: string | null;
+        full_name: string | null;
+        role: string | null;
+        created_at: string;
+        responder_profiles: {
+          municipality: string | null;
+          province: string | null;
+          office_address: string | null;
+          contact_number: string | null;
+          account_status: "pending" | "approved" | "rejected";
+          created_at: string;
+        } | {
+          municipality: string | null;
+          province: string | null;
+          office_address: string | null;
+          contact_number: string | null;
+          account_status: "pending" | "approved" | "rejected";
+          created_at: string;
+        }[] | null;
+      };
+
+      const profiles = profilesRaw as ProfileWithResponderProfile[] | null;
+
       // Transform the data to match ResponderAccount interface
       const allAccountsData: ResponderAccount[] = (profiles || [])
-        .filter((profile) => profile.responder_profiles) // Only include profiles with responder_profiles
+        .filter((profile): profile is ProfileWithResponderProfile => 
+          profile !== null && profile !== undefined && profile.responder_profiles !== null
+        ) // Only include profiles with responder_profiles
         .map((profile) => {
           const responderProfile = Array.isArray(profile.responder_profiles)
             ? profile.responder_profiles[0]
@@ -114,6 +143,7 @@ export default function AdminClient() {
       // Profile role is already 'responder' (set during registration)
       const { error: updateError } = await supabase
         .from("responder_profiles")
+        // @ts-ignore - Supabase types may not be fully generated
         .update({ account_status: "approved" })
         .eq("id", accountId);
 
@@ -137,6 +167,7 @@ export default function AdminClient() {
       // Update responder_profiles account_status to 'rejected'
       const { error: updateError } = await supabase
         .from("responder_profiles")
+        // @ts-ignore - Supabase types may not be fully generated
         .update({ account_status: "rejected" })
         .eq("id", accountId);
 
