@@ -5,39 +5,43 @@ export type RootStackParamList = {
   Login2: undefined;
   Login3: undefined;
   Login4: undefined;
-  Login5: undefined;
+  Login5: { email?: string } | undefined;
   Home: undefined;
   Alert: undefined;
-  Alert2: undefined;
-  Alert3: undefined;
+  Alert2: { alertId: string };
+  Alert3: { alertId?: string };
   AlertRejected: undefined;
   Report1: undefined;
   Report2: {
     imageUri: string;
     latitude: number;
     longitude: number;
-    timestamp: Date;
+    timestamp: string; // ISO string to avoid non-serializable warning
     locationName?: string;
   };
   Report3: {
     imageUri: string;
     latitude: number;
     longitude: number;
-    timestamp: Date;
+    timestamp: string; // ISO string to avoid non-serializable warning
     locationName?: string;
   };
-  Report4: undefined;
-  Report5: undefined;
+  Report4: { reportId: string };
+  Report5: { reportId?: string };
   ReportRejected: undefined;
   Settings1: undefined;
   Profile: undefined;
   History: undefined;
   HistoryDetails: {
     imageUri: string;
-    date: Date;
+    date: string; // ISO string to avoid serialization issues
     latitude: number;
     longitude: number;
     locationName: string;
+    description?: string;
+    status?: string;
+    incidentType?: "alert" | "report";
+    alertId?: string;
   };
 };
 
