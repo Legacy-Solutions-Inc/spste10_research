@@ -1,16 +1,24 @@
 import { View, Text, TouchableOpacity, Animated } from "react-native";
 import { useEffect, useRef, useState } from "react";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import type { RootStackParamList } from "@/navigation/types";
 import { CancelAlertModal } from "@/components/CancelAlertModal";
+import { useCheckReportStatus } from "./hooks/useCheckReportStatus";
+import { useCancelReport } from "./hooks/useCancelReport";
 
 type Report4Navigation = NativeStackNavigationProp<RootStackParamList, "Report4">;
+type Report4Route = RouteProp<RootStackParamList, "Report4">;
 
 export function ReportScreen4() {
   const navigation = useNavigation<Report4Navigation>();
+  const route = useRoute<Report4Route>();
+  const reportId = route.params?.reportId;
   const [showCancelModal, setShowCancelModal] = useState(false);
+  
+  const { status, loading: statusLoading } = useCheckReportStatus(reportId || null, !!reportId);
+  const { cancelReport, loading: cancelLoading } = useCancelReport();
   
   // Animated values for concentric circles
   const scale1 = useRef(new Animated.Value(1)).current;
@@ -75,28 +83,31 @@ export function ReportScreen4() {
     };
   }, []);
 
-  // Simulate responder response after 5 seconds
-  // In a real app, this would be triggered by an API response or state management
+  // Navigate based on report status
   useEffect(() => {
-    const timer = setTimeout(() => {
-      // Simulate responder response
-      // In production, replace this with actual API call or state management
-      // Example: if (responderAccepted) { navigation.navigate("Report5"); }
-      // Example: if (responderRejected) { navigation.navigate("ReportRejected"); }
-      
-      // For demo: randomly choose acceptance or rejection
-      // In production, use actual state/API response
-      const responderAccepted = Math.random() > 0.5; // Simulate 50/50 chance
-      
-      if (responderAccepted) {
-        navigation.navigate("Report5");
-      } else {
-        navigation.navigate("ReportRejected");
-      }
-    }, 5000); // 5 seconds delay to simulate responder response
+    if (!status) return;
 
-    return () => clearTimeout(timer);
-  }, [navigation]);
+    if (status.status === "accepted" || status.responseStatus === "accepted") {
+      navigation.navigate("Report5", { reportId });
+    } else if (status.status === "rejected" || status.responseStatus === "rejected") {
+      navigation.navigate("ReportRejected");
+    } else if (status.status === "canceled") {
+      navigation.navigate("Home");
+    }
+  }, [status, navigation, reportId]);
+
+  const handleCancel = async () => {
+    if (!reportId) {
+      navigation.navigate("Home");
+      return;
+    }
+
+    setShowCancelModal(false);
+    const success = await cancelReport(reportId);
+    if (success) {
+      navigation.navigate("Home");
+    }
+  };
 
   return (
     <View className="flex-1 bg-[#0b376c] justify-center items-center px-6 pt-20">
@@ -167,10 +178,7 @@ export function ReportScreen4() {
       {/* Cancel Alert Modal */}
       <CancelAlertModal
         visible={showCancelModal}
-        onConfirm={() => {
-          setShowCancelModal(false);
-          navigation.navigate("Home");
-        }}
+        onConfirm={handleCancel}
         onCancel={() => setShowCancelModal(false)}
       />
     </View>

@@ -12,7 +12,7 @@ export function useSignUp() {
   const [loading, setLoading] = useState(false);
   const supabaseAvailable = isSupabaseConfigured();
 
-  const signUp = async (email: string, password: string) => {
+  const signUp = async (email: string, password: string, fullName?: string) => {
     if (!email.trim() || !password.trim()) {
       Alert.alert("Error", "Please fill in all fields");
       return false;
@@ -44,11 +44,22 @@ export function useSignUp() {
       }
 
       if (data.user) {
-        Alert.alert(
-          "Success",
-          "Account created! Please check your email to verify your account.",
-          [{ text: "OK", onPress: () => navigation.replace("Home") }]
-        );
+        // The trigger automatically creates a profile, now update it with full_name if provided
+        if (fullName && fullName.trim()) {
+          const { error: profileError } = await supabase!
+            .from("profiles")
+            .update({ full_name: fullName.trim() })
+            .eq("id", data.user.id);
+
+          if (profileError) {
+            console.error("Profile update error:", profileError);
+            // Don't fail the signup if profile update fails - profile was still created by trigger
+            // Log it but continue with success
+          }
+        }
+
+        // Navigate to email confirmation screen
+        navigation.navigate("Login5", { email: data.user.email || undefined });
         return true;
       }
       return false;

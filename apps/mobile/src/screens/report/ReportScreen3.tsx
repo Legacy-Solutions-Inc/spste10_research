@@ -1,7 +1,10 @@
-import { View, Text, TouchableOpacity, Image, StyleSheet, ScrollView } from "react-native";
+import { View, Text, TouchableOpacity, Image, StyleSheet, ScrollView, ActivityIndicator } from "react-native";
+import { useState } from "react";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "@/navigation/types";
+import { useUploadReportImage } from "./hooks/useUploadReportImage";
+import { useCreateReport } from "./hooks/useCreateReport";
 
 type Report3Navigation = NativeStackNavigationProp<
   RootStackParamList,
@@ -12,7 +15,14 @@ type Report3RouteProp = RouteProp<RootStackParamList, "Report3">;
 export function ReportScreen3() {
   const navigation = useNavigation<Report3Navigation>();
   const route = useRoute<Report3RouteProp>();
-  const { imageUri, latitude, longitude, timestamp, locationName } = route.params;
+  const { imageUri, latitude, longitude, timestamp: timestampString, locationName } = route.params;
+  const [isSending, setIsSending] = useState(false);
+  
+  // Convert timestamp string back to Date
+  const timestamp = new Date(timestampString);
+  
+  const { uploadImage, loading: uploadLoading } = useUploadReportImage();
+  const { createReport, loading: createLoading } = useCreateReport();
 
   // Format date and time
   const formatDate = (date: Date) => {
@@ -39,9 +49,55 @@ export function ReportScreen3() {
     }) + " " + formatTime(date);
   };
 
-  const handleSend = () => {
-    // Navigate to ReportScreen4 after sending
-    navigation.navigate("Report4");
+  const handleSend = async () => {
+    setIsSending(true);
+
+    try {
+      // Create report first without image URL (we'll update it after upload)
+      const tempReportData = await createReport({
+        latitude,
+        longitude,
+        locationName,
+        imageUrl: "", // Temporary, will update after upload
+        description: aiDescription,
+      });
+
+      if (!tempReportData) {
+        setIsSending(false);
+        return;
+      }
+
+      // Upload image with report ID
+      const imageUrl = await uploadImage(imageUri, tempReportData.id);
+
+      if (!imageUrl) {
+        // If upload fails, navigate anyway - the report exists without image
+        // In production, you might want to delete the report or show an error
+        navigation.navigate("Report4", { reportId: tempReportData.id });
+        setIsSending(false);
+        return;
+      }
+
+      // Update report with image URL
+      const { supabase, isSupabaseConfigured } = await import("@/lib/supabase");
+      if (isSupabaseConfigured()) {
+        const { error: updateError } = await supabase!
+          .from("reports")
+          .update({ image_url: imageUrl })
+          .eq("id", tempReportData.id);
+
+        if (updateError) {
+          console.error("Failed to update report with image URL:", updateError);
+          // Continue anyway - report exists
+        }
+      }
+      
+      // Navigate to ReportScreen4 with report ID
+      navigation.navigate("Report4", { reportId: tempReportData.id });
+    } catch (error) {
+      console.error("Error sending report:", error);
+      setIsSending(false);
+    }
   };
 
   // AI-generated description (placeholder)
@@ -127,10 +183,18 @@ export function ReportScreen3() {
       <View className="items-center mb-8">
         <TouchableOpacity
           onPress={handleSend}
+          disabled={isSending || uploadLoading || createLoading}
           className="bg-blue-900 rounded-full py-3 px-10 shadow-lg"
           activeOpacity={0.8}
         >
-          <Text className="text-white font-bold text-base">SEND</Text>
+          {isSending || uploadLoading || createLoading ? (
+            <View className="flex-row items-center">
+              <ActivityIndicator size="small" color="white" />
+              <Text className="text-white font-bold text-base ml-2">Sending...</Text>
+            </View>
+          ) : (
+            <Text className="text-white font-bold text-base">SEND</Text>
+          )}
         </TouchableOpacity>
       </View>
     </ScrollView>

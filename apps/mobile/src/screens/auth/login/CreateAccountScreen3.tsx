@@ -45,8 +45,8 @@ export function CreateAccountScreen() {
       return;
     }
 
-    // Use email + password for Supabase sign up
-    signUp(email, password);
+    // Use email + password for Supabase sign up, pass username as full_name
+    signUp(email, password, username.trim());
   };
 
   return (

@@ -18,7 +18,7 @@ import { SupabaseWarning } from "./components/SupabaseWarning";
 export function LoginScreen2() {
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList, "Login2">>();
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const { login, loading: loginLoading, supabaseAvailable } = useLogin();
   const { signUp, loading: signUpLoading } = useSignUp();
@@ -26,12 +26,11 @@ export function LoginScreen2() {
   const loading = loginLoading || signUpLoading;
 
   const handleLogin = () => {
-    // Reuse email field for username in auth for now
-    login(username, password);
+    login(email, password);
   };
 
   const handleSignUp = () => {
-    signUp(username, password);
+    signUp(email, password);
   };
 
   return (
@@ -68,14 +67,15 @@ export function LoginScreen2() {
             </View>
           )}
 
-          {/* Username */}
+          {/* Email */}
           <View className="mb-3 px-2">
             <TextInput
               className="h-11 rounded-full border border-[#1b4f8f]/40 px-4 text-sm text-gray-900 bg-white"
-              placeholder="Username"
+              placeholder="email"
               placeholderTextColor="#a0aec0"
-              value={username}
-              onChangeText={setUsername}
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
               editable={!loading && supabaseAvailable}

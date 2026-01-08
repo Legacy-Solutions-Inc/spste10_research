@@ -7,6 +7,7 @@ import {
   LoginScreen2,
   CreateAccountScreen,
   ResetPassword,
+  EmailConfirmationScreen,
 } from "./src/screens/auth/login";
 import { HomeScreen } from "./src/screens/HomeScreen";
 import { AlertScreen } from "./src/screens/alert/AlertScreen";
@@ -52,6 +53,11 @@ function App() {
         <Stack.Screen
           name="Login4"
           component={ResetPassword}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="Login5"
+          component={EmailConfirmationScreen}
           options={{ headerShown: false }}
         />
         <Stack.Screen

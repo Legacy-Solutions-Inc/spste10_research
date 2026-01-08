@@ -6,13 +6,17 @@ import {
   ScrollView,
   Image,
   Alert,
+  ActivityIndicator,
 } from "react-native";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import * as ImagePicker from "expo-image-picker";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import type { RootStackParamList } from "@/navigation/types";
+import { useGetProfile } from "./hooks/useGetProfile";
+import { useUpdateProfile } from "./hooks/useUpdateProfile";
+import { useUploadProfileImage } from "./hooks/useUploadProfileImage";
 
 type ProfileNavigation = NativeStackNavigationProp<
   RootStackParamList,
@@ -21,7 +25,12 @@ type ProfileNavigation = NativeStackNavigationProp<
 
 export function ProfileScreen() {
   const navigation = useNavigation<ProfileNavigation>();
+  const { profileData, loading: loadingProfile, error: profileError, refetch } = useGetProfile();
+  const { updateProfile, loading: savingProfile } = useUpdateProfile();
+  const { uploadImage, loading: uploadingImage } = useUploadProfileImage();
+  
   const [profileImage, setProfileImage] = useState<string | null>(null);
+  const [profileImageUri, setProfileImageUri] = useState<string | null>(null); // Local URI before upload
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
@@ -32,6 +41,23 @@ export function ProfileScreen() {
     gender: "",
     email: "",
   });
+
+  // Load profile data when it's fetched
+  useEffect(() => {
+    if (profileData) {
+      setFormData({
+        firstName: profileData.first_name || "",
+        lastName: profileData.last_name || "",
+        address: profileData.address || "",
+        birthday: profileData.birthday || "",
+        age: profileData.age?.toString() || "",
+        bloodType: profileData.blood_type || "",
+        gender: profileData.gender || "",
+        email: profileData.email || "",
+      });
+      setProfileImage(profileData.avatar_url);
+    }
+  }, [profileData]);
 
   // Check if required fields are filled (for enabling SAVE button)
   const isFormValid = () => {
@@ -63,7 +89,8 @@ export function ProfileScreen() {
       });
 
       if (!result.canceled && result.assets[0]) {
-        setProfileImage(result.assets[0].uri);
+        setProfileImageUri(result.assets[0].uri);
+        setProfileImage(result.assets[0].uri); // Show immediately
       }
     } catch (error) {
       console.error("Error picking image:", error);
@@ -71,22 +98,81 @@ export function ProfileScreen() {
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!isFormValid()) {
       Alert.alert("Validation Error", "Please fill in all required fields.");
       return;
     }
 
-    // In a real app, save to backend/database
-    console.log("Saving profile:", { ...formData, profileImage });
-    Alert.alert("Success", "Profile saved successfully!");
-    // Optionally navigate back
-    // navigation.goBack();
+    try {
+      // First, upload profile image if a new one was selected
+      let avatarUrl = profileImage;
+      if (profileImageUri && profileImageUri !== profileData?.avatar_url) {
+        const uploadedUrl = await uploadImage(profileImageUri);
+        if (uploadedUrl) {
+          avatarUrl = uploadedUrl;
+          setProfileImage(uploadedUrl);
+        }
+      }
+
+      // Calculate full_name from first_name + last_name
+      const fullName = `${formData.firstName.trim()} ${formData.lastName.trim()}`.trim() || null;
+
+      // Save profile data
+      const success = await updateProfile({
+        full_name: fullName,
+        email: formData.email.trim() || undefined,
+        avatar_url: avatarUrl || undefined,
+        first_name: formData.firstName.trim() || undefined,
+        last_name: formData.lastName.trim() || undefined,
+        address: formData.address.trim() || undefined,
+        birthday: formData.birthday.trim() || undefined,
+        age: formData.age.trim() || undefined,
+        blood_type: formData.bloodType.trim() || undefined,
+        gender: formData.gender.trim() || undefined,
+      });
+
+      if (success) {
+        // Refresh profile data
+        await refetch();
+        setProfileImageUri(null); // Clear local URI
+      }
+    } catch (error) {
+      console.error("Save profile error:", error);
+      // Error is already handled in the hook
+    }
   };
 
   const updateField = (field: keyof typeof formData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
+
+  if (loadingProfile) {
+    return (
+      <View className="flex-1 bg-white justify-center items-center">
+        <ActivityIndicator size="large" color="#0b376c" />
+        <Text className="mt-4 text-gray-600">Loading profile...</Text>
+      </View>
+    );
+  }
+
+  if (profileError) {
+    return (
+      <View className="flex-1 bg-white justify-center items-center px-6">
+        <MaterialCommunityIcons name="alert-circle" size={64} color="#EF4444" />
+        <Text className="mt-4 text-lg font-bold text-gray-900 text-center">
+          Error Loading Profile
+        </Text>
+        <Text className="mt-2 text-gray-600 text-center">{profileError}</Text>
+        <TouchableOpacity
+          onPress={() => refetch()}
+          className="mt-6 bg-blue-900 px-6 py-3 rounded-full"
+        >
+          <Text className="text-white font-bold">Retry</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <ScrollView className="flex-1 bg-white">
@@ -211,20 +297,23 @@ export function ProfileScreen() {
         {/* Save Button */}
         <TouchableOpacity
           onPress={handleSave}
-          disabled={!isFormValid()}
-          className={`rounded-full px-6 py-2 self-end mt-4 ${
-            isFormValid()
+          disabled={!isFormValid() || savingProfile || uploadingImage}
+          className={`rounded-full px-6 py-2 self-end mt-4 flex-row items-center ${
+            isFormValid() && !savingProfile && !uploadingImage
               ? "bg-blue-900"
               : "bg-blue-100"
           }`}
-          activeOpacity={isFormValid() ? 0.8 : 1}
+          activeOpacity={isFormValid() && !savingProfile && !uploadingImage ? 0.8 : 1}
         >
+          {(savingProfile || uploadingImage) && (
+            <ActivityIndicator size="small" color="white" className="mr-2" />
+          )}
           <Text
             className={`font-bold text-base ${
-              isFormValid() ? "text-white" : "text-blue-300"
+              isFormValid() && !savingProfile && !uploadingImage ? "text-white" : "text-blue-300"
             }`}
           >
-            SAVE
+            {savingProfile || uploadingImage ? "SAVING..." : "SAVE"}
           </Text>
         </TouchableOpacity>
       </View>

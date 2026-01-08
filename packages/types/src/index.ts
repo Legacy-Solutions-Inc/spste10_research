@@ -1,2 +1,2 @@
-export type { Database } from "./supabase";
+export type { Database, user_role } from "./supabase";
 
