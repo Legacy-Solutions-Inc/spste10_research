@@ -6,6 +6,7 @@ import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import type { Session } from "@supabase/supabase-js";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import type { RootStackParamList } from "@/navigation/types";
+import { useGetProfile } from "@/screens/settingsOptions/hooks/useGetProfile";
 
 type HomeNavigation = NativeStackNavigationProp<RootStackParamList, "Home">;
 
@@ -14,6 +15,30 @@ export function HomeScreen() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const supabaseAvailable = isSupabaseConfigured();
+  const { profileData, loading: loadingProfile } = useGetProfile();
+
+  // Helper function to get display name with priority order
+  const getDisplayName = (): string => {
+    if (!profileData) return "User";
+
+    // Priority 1: first_name (from user_profiles) - show just first name if present
+    if (profileData.first_name) {
+      return profileData.first_name;
+    }
+
+    // Priority 2: full_name (from profiles table)
+    if (profileData.full_name) {
+      return profileData.full_name;
+    }
+
+    // Priority 3: Email (show part before @)
+    if (profileData.email) {
+      return profileData.email.split("@")[0];
+    }
+
+    // Fallback
+    return "User";
+  };
 
   useEffect(() => {
     if (!supabaseAvailable) {
@@ -60,21 +85,30 @@ export function HomeScreen() {
       <View className="pt-20">
        
         {/* Header */}
-        <View className="flex-row items-center justify-between mb-20 px-4">
+        <View className="flex-row items-center justify-between mb-10 px-4">
           <View className="flex-row items-center">
             {/* Avatar */}
-            <View className="h-20 w-20 rounded-full bg-yellow-400 items-center justify-center mr-4">
-              <Image
-                source={{
-                  uri: "https://avatars.githubusercontent.com/u/000000?v=4",
-                }}
-                className="h-18 w-18 rounded-full"
-              />
+            <View className="h-20 w-20 rounded-full bg-gray-200 items-center justify-center mr-4 overflow-hidden">
+              {profileData?.avatar_url ? (
+                <Image
+                  source={{ uri: profileData.avatar_url }}
+                  className="h-full w-full"
+                  resizeMode="cover"
+                />
+              ) : (
+                <MaterialCommunityIcons
+                  name="account"
+                  size={48}
+                  color="#9CA3AF"
+                />
+              )}
             </View>
             
             <View>
               <Text className="text-lg font-semibold text-gray-700">Hello!</Text>
-              <Text className="text-3xl font-extrabold text-black">Joy</Text>
+              <Text className="text-3xl font-extrabold text-black">
+                {loadingProfile ? "..." : getDisplayName()}
+              </Text>
             </View>
           </View>
           <TouchableOpacity onPress={() => navigation.navigate("Settings1")}>
@@ -87,7 +121,7 @@ export function HomeScreen() {
         </View>
 
         {/* Card 1 */}
-        <View className="mt-10 mb-20 px-4">
+        <View className="mt-16 mb-20 px-4">
           <Text className="text-2xl font-extrabold text-[#0b376c] mb-4">
             Are you in an emergency?
           </Text>
@@ -116,7 +150,7 @@ export function HomeScreen() {
         </View>
 
         {/* Card 2 */}
-        <View className="mb-14 px-4">
+        <View className="mb-20 px-4">
           <Text className="text-2xl font-extrabold text-[#0b376c] mb-4">
             Did you witness an emergency?
           </Text>
@@ -143,7 +177,18 @@ export function HomeScreen() {
               </View>
             </View>
           </TouchableOpacity>
+          
         </View>
+        {/* Footer */}
+      <View className="bg-blue-900 h-16 rounded-t-xl items-center justify-center">
+        <View className="h-12 w-12 rounded-full bg-white/20 items-center justify-center">
+          <MaterialCommunityIcons
+            name="reddit"
+            size={40}
+            color="white"
+          />
+        </View>
+      </View>
       </View>
     </ScrollView>
   );
