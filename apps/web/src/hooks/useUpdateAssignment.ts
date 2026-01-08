@@ -42,9 +42,9 @@ export function useUpdateAssignment() {
         updateData.responded_at = new Date().toISOString();
       }
 
-      // @ts-ignore - Supabase types may not be fully generated
       const { data, error: updateError } = await supabase
         .from("responder_assignments")
+        // @ts-ignore - Supabase types may not be fully generated
         .update(updateData)
         .eq("id", assignmentId)
         .eq("responder_id", user.id)
