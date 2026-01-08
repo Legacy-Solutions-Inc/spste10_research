@@ -21,28 +21,39 @@ export default function Sidebar() {
       if (user) {
         // Try to get name and role from profiles table
         try {
-          const { data: profile } = await supabase
+          // @ts-ignore - Supabase types may not be fully generated
+          const { data: profileRaw } = await supabase
             .from("profiles")
-            .select("name, role")
+            .select("full_name, role")
             .eq("id", user.id)
             .single();
 
-          if (profile?.name) {
-            setUserName(profile.name);
+          // Type assertion for profile data
+          type ProfileData = {
+            full_name: string | null;
+            role: string | null;
+          } | null;
+
+          const profile = profileRaw as ProfileData;
+
+          console.log("[Sidebar] Profile data:", { role: profile?.role, full_name: profile?.full_name });
+
+          if (profile?.full_name) {
+            setUserName(profile.full_name);
           } else {
             // Fallback to email if name not available
             setUserName(user.email?.split("@")[0] || "User");
           }
 
-          // Check if user is admin
-          // For now, allow all authenticated users to access admin
-          // In production, check: setIsAdmin(profile?.role === "admin");
-          setIsAdmin(true); // TODO: Replace with actual role check
+          // Check if user is admin - only show Admin button for admins
+          const userIsAdmin = profile?.role === "admin";
+          console.log("[Sidebar] User is admin:", userIsAdmin);
+          setIsAdmin(userIsAdmin);
         } catch {
           // Profiles table might not exist, use email as fallback
           setUserName(user.email?.split("@")[0] || "User");
-          // Allow access for now if profile table doesn't exist
-          setIsAdmin(true);
+          // Default to not admin if profile table doesn't exist
+          setIsAdmin(false);
         }
       }
     };

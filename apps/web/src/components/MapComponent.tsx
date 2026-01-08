@@ -5,6 +5,7 @@ import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { Alert } from "@/types/alert";
+import { isStoragePath, extractFilePath, getSignedUrl } from "@/lib/storageUtils";
 
 // Fix for default marker icons in Next.js
 const iconRetinaUrl = "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png";
@@ -47,12 +48,29 @@ const reportIconPath = "/icons/report-icon.png";
 const alertIcon = createIconWithFallback(alertIconPath, DefaultIcon);
 const reportIcon = createIconWithFallback(reportIconPath, DefaultIcon);
 
+// Custom icon for responder location (blue marker)
+const responderIcon = L.divIcon({
+  className: "responder-marker",
+  html: `<div style="
+    width: 30px;
+    height: 30px;
+    background-color: #1e40af;
+    border: 3px solid white;
+    border-radius: 50%;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+  "></div>`,
+  iconSize: [30, 30],
+  iconAnchor: [15, 15],
+  popupAnchor: [0, -15],
+});
+
 L.Marker.prototype.options.icon = DefaultIcon;
 
 interface MapComponentProps {
   alerts: Alert[];
   selectedAlert: Alert | null;
   center: [number, number];
+  responderLocation?: [number, number] | null;
   onApprove?: (alertId: string) => void;
   onDismiss?: (alertId: string) => void;
 }
@@ -70,15 +88,31 @@ function MapViewUpdater({ selectedAlert }: { selectedAlert: Alert | null }) {
   return null;
 }
 
+// Component to handle map center updates when center prop changes
+function MapCenterUpdater({ center }: { center: [number, number] }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (center && center[0] && center[1]) {
+      console.log(`[MapCenterUpdater] Updating map center to:`, center);
+      map.setView(center, 13);
+    }
+  }, [center, map]);
+
+  return null;
+}
+
 export default function MapComponent({
   alerts,
   selectedAlert,
   center,
+  responderLocation,
   onApprove,
   onDismiss,
 }: MapComponentProps) {
   const [expandedAlertId, setExpandedAlertId] = useState<string | null>(null);
   const [iconsAvailable, setIconsAvailable] = useState({ alert: false, report: false });
+  const [imageUrls, setImageUrls] = useState<Record<string, string>>({});
 
   // Check if custom icons exist and are loadable
   useEffect(() => {
@@ -97,6 +131,64 @@ export default function MapComponent({
     checkIconExists(alertIconPath, "alert");
     checkIconExists(reportIconPath, "report");
   }, []);
+
+  // Fetch signed URLs for report images
+  useEffect(() => {
+    const fetchImageUrls = async () => {
+      const urlMap: Record<string, string> = {};
+      
+      for (const alert of alerts) {
+        if (alert.imageUrl && alert.type === "Emergency Report") {
+          console.log(`[MapComponent] Processing image for alert ${alert.id}:`, alert.imageUrl);
+          
+          // If it's already a full HTTP/HTTPS URL that's not a storage URL, use as-is
+          if (alert.imageUrl.startsWith("http://") || alert.imageUrl.startsWith("https://")) {
+            // Check if it's a Supabase storage URL (needs signed URL) or external URL (use as-is)
+            if (alert.imageUrl.includes("/storage/v1/object/public/")) {
+              // Public URL, use as-is
+              urlMap[alert.id] = alert.imageUrl;
+              console.log(`[MapComponent] Using public URL for ${alert.id}`);
+            } else if (!alert.imageUrl.includes("/storage/v1/")) {
+              // External URL, use as-is
+              urlMap[alert.id] = alert.imageUrl;
+              console.log(`[MapComponent] Using external URL for ${alert.id}`);
+            } else {
+              // Signed URL, use as-is
+              urlMap[alert.id] = alert.imageUrl;
+              console.log(`[MapComponent] Using signed URL for ${alert.id}`);
+            }
+          } else {
+            // It's a storage path, need to get signed URL
+            const filePath = extractFilePath(alert.imageUrl, "report-images");
+            console.log(`[MapComponent] Extracted file path for ${alert.id}:`, filePath);
+            
+            if (filePath) {
+              try {
+                const signedUrl = await getSignedUrl("report-images", filePath);
+                if (signedUrl) {
+                  urlMap[alert.id] = signedUrl;
+                  console.log(`[MapComponent] Got signed URL for ${alert.id}`);
+                } else {
+                  console.warn(`[MapComponent] Failed to get signed URL for ${alert.id}, path: ${filePath}. This may be due to RLS policies.`);
+                }
+              } catch (err) {
+                console.error(`[MapComponent] Exception getting signed URL for ${alert.id}:`, err);
+              }
+            } else {
+              console.error(`[MapComponent] Could not extract file path for ${alert.id}, original: ${alert.imageUrl}`);
+            }
+          }
+        }
+      }
+      
+      console.log(`[MapComponent] Final image URLs:`, urlMap);
+      setImageUrls(urlMap);
+    };
+
+    if (alerts.length > 0) {
+      fetchImageUrls();
+    }
+  }, [alerts]);
 
   // Get the appropriate icon with fallback to DefaultIcon
   const getIcon = (isReport: boolean) => {
@@ -136,7 +228,19 @@ export default function MapComponent({
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
+        <MapCenterUpdater center={center} />
         <MapViewUpdater selectedAlert={selectedAlert} />
+        {/* Responder location marker */}
+        {responderLocation && (
+          <Marker position={responderLocation} icon={responderIcon}>
+            <Popup>
+              <div className="bg-blue-600 text-white p-2 rounded shadow">
+                <p className="text-sm font-semibold">Your Location</p>
+                <p className="text-xs text-blue-100">Responder Office</p>
+              </div>
+            </Popup>
+          </Marker>
+        )}
         {alerts.map((alert) => {
           const isExpanded = expandedAlertId === alert.id;
           const isReport = alert.type === "Emergency Report";
@@ -165,20 +269,56 @@ export default function MapComponent({
                         </p>
                       )}
                       {/* Report image */}
-                      {alert.imageUrl ? (
-                        <div className="mb-3 mt-2 rounded overflow-hidden">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={alert.imageUrl}
-                            alt="Report"
-                            className="w-full h-auto max-h-32 object-cover"
-                          />
-                        </div>
-                      ) : (
-                        <div className="mb-3 mt-2 bg-gray-700 rounded p-2 text-xs text-gray-300 text-center min-h-[80px] flex items-center justify-center">
-                          No image available
-                        </div>
-                      )}
+                      {(() => {
+                        // Check if we have a signed URL ready
+                        const signedUrl = imageUrls[alert.id];
+                        // Check if it's already a full URL
+                        const fullUrl = alert.imageUrl && (alert.imageUrl.startsWith("http://") || alert.imageUrl.startsWith("https://")) ? alert.imageUrl : null;
+                        const imageUrl = signedUrl || fullUrl;
+                        
+                        if (imageUrl) {
+                          return (
+                            <div className="mb-3 mt-2 rounded overflow-hidden bg-gray-800">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={imageUrl}
+                                alt="Report"
+                                className="w-full h-auto max-h-32 object-cover"
+                                onError={(e) => {
+                                  console.error(`[MapComponent] Image failed to load for ${alert.id}:`, imageUrl);
+                                  console.error(`[MapComponent] Original imageUrl:`, alert.imageUrl);
+                                  // If image fails to load, show placeholder
+                                  const target = e.target as HTMLImageElement;
+                                  target.style.display = 'none';
+                                  const parent = target.parentElement;
+                                  if (parent) {
+                                    parent.innerHTML = '<div class="mb-3 mt-2 bg-gray-700 rounded p-2 text-xs text-gray-300 text-center min-h-[80px] flex items-center justify-center">Image failed to load</div>';
+                                  }
+                                }}
+                                onLoad={() => {
+                                  console.log(`[MapComponent] Image loaded successfully for ${alert.id}`);
+                                }}
+                              />
+                            </div>
+                          );
+                        } else if (alert.imageUrl) {
+                          // Has image URL but signed URL not ready yet or failed to generate
+                          // Show loading state, but also log for debugging
+                          console.log(`[MapComponent] Image URL exists but not loaded yet for ${alert.id}:`, alert.imageUrl);
+                          return (
+                            <div className="mb-3 mt-2 bg-gray-700 rounded p-2 text-xs text-gray-300 text-center min-h-[80px] flex items-center justify-center">
+                              Loading image...
+                            </div>
+                          );
+                        } else {
+                          // No image URL in database
+                          return (
+                            <div className="mb-3 mt-2 bg-gray-700 rounded p-2 text-xs text-gray-300 text-center min-h-[80px] flex items-center justify-center">
+                              No image available
+                            </div>
+                          );
+                        }
+                      })()}
                       {/* Report description */}
                       {alert.description ? (
                         <p className="text-sm text-white mb-1">

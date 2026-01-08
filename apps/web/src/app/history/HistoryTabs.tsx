@@ -1,92 +1,33 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import HistoryCard from "./HistoryCard";
 import HistoryDetailModal from "./HistoryDetailModal";
-
-interface HistoryItem {
-  id: string;
-  name: string;
-  location: string;
-  time: string;
-  type: "Emergency Alert" | "Emergency Report";
-  status: "accepted" | "dismissed";
-  // For Emergency Alerts
-  age?: number;
-  bloodType?: string;
-  sex?: string;
-  // For Emergency Reports
-  imageUrl?: string;
-  description?: string;
-}
-
-// Mock data for accepted reports
-const acceptedReports: HistoryItem[] = [
-  {
-    id: "1",
-    name: "Gary Bid",
-    location: "Poblacion Ilawod, Lambunao, Iloilo",
-    time: "Jan 7, 2026, 11:00 PM",
-    type: "Emergency Alert",
-    status: "accepted",
-    age: 32,
-    bloodType: "O",
-    sex: "Male",
-  },
-  {
-    id: "2",
-    name: "Maria Santos",
-    location: "Santa Barbara, Iloilo",
-    time: "Jan 7, 2026, 10:30 PM",
-    type: "Emergency Report",
-    status: "accepted",
-    description: "Road accident reported at the intersection. Multiple vehicles involved. Emergency services requested.",
-    imageUrl: undefined,
-  },
-  {
-    id: "3",
-    name: "Juan Dela Cruz",
-    location: "Pavia, Iloilo",
-    time: "Jan 7, 2026, 9:15 PM",
-    type: "Emergency Alert",
-    status: "accepted",
-    age: 45,
-    bloodType: "A",
-    sex: "Male",
-  },
-];
-
-// Mock data for dismissed reports
-const dismissedReports: HistoryItem[] = [
-  {
-    id: "4",
-    name: "John Doe",
-    location: "San Miguel, Iloilo",
-    time: "Jan 7, 2026, 8:45 PM",
-    type: "Emergency Report",
-    status: "dismissed",
-    description: "False alarm - no emergency situation found at the reported location.",
-    imageUrl: undefined,
-  },
-  {
-    id: "5",
-    name: "Jane Smith",
-    location: "Oton, Iloilo",
-    time: "Jan 7, 2026, 7:20 PM",
-    type: "Emergency Alert",
-    status: "dismissed",
-    age: 28,
-    bloodType: "B",
-    sex: "Female",
-  },
-];
+import { useFetchHistory } from "@/hooks/useFetchHistory";
+import { incidentToHistoryItem, type HistoryItem } from "./utils";
 
 export default function HistoryTabs() {
   const [activeTab, setActiveTab] = useState<"accepted" | "dismissed">("accepted");
   const [selectedItem, setSelectedItem] = useState<HistoryItem | null>(null);
+  
+  const { incidents, reporterNames, loading, error } = useFetchHistory();
 
-  const acceptedCount = acceptedReports.length;
-  const dismissedCount = dismissedReports.length;
+  // Convert incidents to HistoryItem format
+  const historyItems = useMemo(() => {
+    return incidents.map((incident) => incidentToHistoryItem(incident, reporterNames));
+  }, [incidents, reporterNames]);
+
+  // Filter by status
+  const acceptedItems = useMemo(() => {
+    return historyItems.filter((item) => item.status === "accepted");
+  }, [historyItems]);
+
+  const dismissedItems = useMemo(() => {
+    return historyItems.filter((item) => item.status === "dismissed");
+  }, [historyItems]);
+
+  const acceptedCount = acceptedItems.length;
+  const dismissedCount = dismissedItems.length;
 
   const handleCardClick = (item: HistoryItem) => {
     setSelectedItem(item);
@@ -95,6 +36,26 @@ export default function HistoryTabs() {
   const handleCloseModal = () => {
     setSelectedItem(null);
   };
+
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="text-center py-12">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-900 mx-auto mb-4"></div>
+        <p className="text-gray-600">Loading history...</p>
+      </div>
+    );
+  }
+
+  // Show error state
+  if (error) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-red-600 mb-4">Error: {error}</p>
+        <p className="text-gray-500 text-sm">Failed to load history. Please try refreshing the page.</p>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -133,12 +94,12 @@ export default function HistoryTabs() {
       {/* Content */}
       <div className="space-y-4">
         {activeTab === "accepted" ? (
-          acceptedReports.length > 0 ? (
-            acceptedReports.map((report) => (
+          acceptedItems.length > 0 ? (
+            acceptedItems.map((report) => (
               <HistoryCard
                 key={report.id}
                 report={report}
-                onClick={() => handleCardClick(report)}
+                onClick={() => setSelectedItem(report)}
               />
             ))
           ) : (
@@ -147,12 +108,12 @@ export default function HistoryTabs() {
             </div>
           )
         ) : (
-          dismissedReports.length > 0 ? (
-            dismissedReports.map((report) => (
+          dismissedItems.length > 0 ? (
+            dismissedItems.map((report) => (
               <HistoryCard
                 key={report.id}
                 report={report}
-                onClick={() => handleCardClick(report)}
+                onClick={() => setSelectedItem(report)}
               />
             ))
           ) : (
@@ -165,7 +126,7 @@ export default function HistoryTabs() {
 
       {/* Detail Modal */}
       {selectedItem && (
-        <HistoryDetailModal item={selectedItem} onClose={handleCloseModal} />
+        <HistoryDetailModal item={selectedItem} onClose={() => setSelectedItem(null)} />
       )}
     </div>
   );

@@ -19,28 +19,43 @@ export default async function SettingsPage() {
   }
 
   // Fetch user profile data from profiles table
-  let profile = null;
+  type ProfileData = {
+    id: string;
+    full_name: string | null;
+    email: string | null;
+  } | null;
+
+  type ResponderProfileData = {
+    municipality: string | null;
+    province: string | null;
+    office_address: string | null;
+    contact_number: string | null;
+  } | null;
+
+  let profile: ProfileData = null;
   try {
+    // @ts-ignore - Supabase types may not be fully generated
     const { data } = await supabase
       .from("profiles")
       .select("*")
       .eq("id", session.user.id)
       .single();
-    profile = data;
+    profile = data as ProfileData;
   } catch (error) {
     console.error("Error fetching profile:", error);
     profile = null;
   }
 
   // Fetch responder profile data if it exists
-  let responderProfile = null;
+  let responderProfile: ResponderProfileData = null;
   try {
+    // @ts-ignore - Supabase types may not be fully generated
     const { data } = await supabase
       .from("responder_profiles")
       .select("*")
       .eq("id", session.user.id)
       .single();
-    responderProfile = data;
+    responderProfile = data as ResponderProfileData;
   } catch (error) {
     // Responder profile may not exist - that's okay
     responderProfile = null;
