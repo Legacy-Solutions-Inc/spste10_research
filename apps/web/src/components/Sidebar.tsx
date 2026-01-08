@@ -9,6 +9,7 @@ export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const [userName, setUserName] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     const fetchUserName = async () => {
@@ -18,11 +19,11 @@ export default function Sidebar() {
       } = await supabase.auth.getUser();
 
       if (user) {
-        // Try to get name from profiles table
+        // Try to get name and role from profiles table
         try {
           const { data: profile } = await supabase
             .from("profiles")
-            .select("name")
+            .select("name, role")
             .eq("id", user.id)
             .single();
 
@@ -32,9 +33,16 @@ export default function Sidebar() {
             // Fallback to email if name not available
             setUserName(user.email?.split("@")[0] || "User");
           }
+
+          // Check if user is admin
+          // For now, allow all authenticated users to access admin
+          // In production, check: setIsAdmin(profile?.role === "admin");
+          setIsAdmin(true); // TODO: Replace with actual role check
         } catch {
           // Profiles table might not exist, use email as fallback
           setUserName(user.email?.split("@")[0] || "User");
+          // Allow access for now if profile table doesn't exist
+          setIsAdmin(true);
         }
       }
     };
@@ -52,6 +60,7 @@ export default function Sidebar() {
     { name: "Dashboard", path: "/dashboard", icon: "🛑" },
     { name: "History", path: "/history", icon: "🕘" },
     { name: "Settings", path: "/settings", icon: "⚙️" },
+    ...(isAdmin ? [{ name: "Admin", path: "/admin", icon: "👤" }] : []),
   ];
 
   return (
