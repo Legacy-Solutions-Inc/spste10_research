@@ -15,7 +15,7 @@ type Report3RouteProp = RouteProp<RootStackParamList, "Report3">;
 export function ReportScreen3() {
   const navigation = useNavigation<Report3Navigation>();
   const route = useRoute<Report3RouteProp>();
-  const { imageUri, latitude, longitude, timestamp: timestampString, locationName } = route.params;
+  const { imageUri, latitude, longitude, timestamp: timestampString, locationName, aiDescription } = route.params;
   const [isSending, setIsSending] = useState(false);
   
   // Convert timestamp string back to Date
@@ -59,7 +59,7 @@ export function ReportScreen3() {
         longitude,
         locationName,
         imageUrl: "", // Temporary, will update after upload
-        description: aiDescription,
+        description: description,
       });
 
       if (!tempReportData) {
@@ -100,8 +100,8 @@ export function ReportScreen3() {
     }
   };
 
-  // AI-generated description (placeholder)
-  const aiDescription = `The image shows an individual seated inside a vehicle with a visible injury on the right side of the forehead. The wound appears to be open, with a noticeable amount of blood running downward along the temple and side of the face. The bleeding is concentrated around the upper forehead area, indicating a fresh and possibly deep laceration. The surrounding skin appears reddened, suggesting inflammation or irritation. The individual's hand is raised, touching the temple area near the injury, which may indicate pain or discomfort.`;
+  // Use AI-generated description or fallback
+  const description = aiDescription || "Emergency photo submitted. Description not available.";
 
   return (
     <ScrollView className="flex-1 bg-white">
@@ -173,7 +173,7 @@ export function ReportScreen3() {
         <View className="border border-blue-900 rounded-xl p-4 mt-3 mx-4 mb-4">
           <ScrollView nestedScrollEnabled>
             <Text className="text-sm text-gray-800 leading-5">
-              {aiDescription}
+              {description}
             </Text>
           </ScrollView>
         </View>

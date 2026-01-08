@@ -1,8 +1,10 @@
-import { View, Text, TouchableOpacity, Image, StyleSheet } from "react-native";
+import { View, Text, TouchableOpacity, Image, StyleSheet, ActivityIndicator } from "react-native";
+import { useState } from "react";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import type { RootStackParamList } from "@/navigation/types";
+import { useAnalyzePhoto } from "./hooks/useAnalyzePhoto";
 
 type Report2Navigation = NativeStackNavigationProp<
   RootStackParamList,
@@ -14,21 +16,41 @@ export function ReportScreen2() {
   const navigation = useNavigation<Report2Navigation>();
   const route = useRoute<Report2RouteProp>();
   const { imageUri, latitude, longitude, timestamp, locationName } = route.params;
+  const { analyzePhoto, loading: analyzingPhoto } = useAnalyzePhoto();
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   const handleRetake = () => {
     navigation.goBack();
   };
 
-  const handleDone = () => {
-    // Navigate to ReportScreen3 with all data
-    // timestamp is already a string from route params
-    navigation.navigate("Report3", {
-      imageUri,
-      latitude,
-      longitude,
-      timestamp: typeof timestamp === "string" ? timestamp : timestamp.toISOString(),
-      locationName,
-    });
+  const handleDone = async () => {
+    setIsAnalyzing(true);
+    
+    try {
+      // Analyze photo with AI
+      let aiDescription: string | undefined;
+      try {
+        const description = await analyzePhoto(imageUri);
+        if (description) {
+          aiDescription = description;
+        }
+      } catch (error) {
+        console.warn("[ReportScreen2] AI analysis failed, continuing without description:", error);
+        // Continue without AI description - user can still proceed
+      }
+
+      // Navigate to ReportScreen3 with all data including AI description
+      navigation.navigate("Report3", {
+        imageUri,
+        latitude,
+        longitude,
+        timestamp: typeof timestamp === "string" ? timestamp : timestamp.toISOString(),
+        locationName,
+        aiDescription,
+      });
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   if (!imageUri) {
@@ -93,10 +115,18 @@ export function ReportScreen2() {
         {/* DONE button - dark blue, rounded rectangular */}
         <TouchableOpacity
           onPress={handleDone}
-          className="bg-blue-900 px-8 py-3 rounded-xl"
+          disabled={isAnalyzing || analyzingPhoto}
+          className="bg-blue-900 px-8 py-3 rounded-xl disabled:opacity-50"
           activeOpacity={0.8}
         >
-          <Text className="text-white font-bold text-base">DONE</Text>
+          {isAnalyzing || analyzingPhoto ? (
+            <View className="flex-row items-center">
+              <ActivityIndicator size="small" color="white" />
+              <Text className="text-white font-bold text-base ml-2">Analyzing...</Text>
+            </View>
+          ) : (
+            <Text className="text-white font-bold text-base">DONE</Text>
+          )}
         </TouchableOpacity>
       </View>
     </View>
