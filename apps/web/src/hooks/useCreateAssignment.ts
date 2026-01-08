@@ -44,9 +44,9 @@ export function useCreateAssignment() {
         report_id: incidentType === 'report' ? incidentId : null,
       };
 
-      // @ts-ignore - Supabase types may not be fully generated
       const { data, error: assignmentError } = await supabase
         .from("responder_assignments")
+        // @ts-ignore - Supabase types may not be fully generated
         .insert(assignmentData)
         .select()
         .single();
