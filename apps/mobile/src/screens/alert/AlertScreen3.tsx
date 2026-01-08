@@ -1,15 +1,33 @@
 import { View, Text, TouchableOpacity } from "react-native";
 import { useState } from "react";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "@/navigation/types";
 import { CancelAlertModal } from "@/components/CancelAlertModal";
+import { useCancelAlert } from "./hooks/useCancelAlert";
 
 type Alert3Navigation = NativeStackNavigationProp<RootStackParamList, "Alert3">;
+type Alert3Route = RouteProp<RootStackParamList, "Alert3">;
 
 export function AlertScreen3() {
   const navigation = useNavigation<Alert3Navigation>();
+  const route = useRoute<Alert3Route>();
+  const alertId = route.params?.alertId;
   const [showCancelModal, setShowCancelModal] = useState(false);
+  const { cancelAlert, loading: cancelLoading } = useCancelAlert();
+
+  const handleCancel = async () => {
+    if (!alertId) {
+      navigation.navigate("Home");
+      return;
+    }
+
+    setShowCancelModal(false);
+    const success = await cancelAlert(alertId);
+    if (success) {
+      navigation.navigate("Home");
+    }
+  };
 
   return (
     <View className="flex-1 bg-white pt-12">
@@ -46,10 +64,7 @@ export function AlertScreen3() {
       {/* Cancel Alert Modal */}
       <CancelAlertModal
         visible={showCancelModal}
-        onConfirm={() => {
-          setShowCancelModal(false);
-          navigation.navigate("Home");
-        }}
+        onConfirm={handleCancel}
         onCancel={() => setShowCancelModal(false)}
       />
     </View>

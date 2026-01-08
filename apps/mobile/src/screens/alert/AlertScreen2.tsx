@@ -1,16 +1,24 @@
 import { View, Text, TouchableOpacity, Animated } from "react-native";
 import { useEffect, useRef, useState } from "react";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import type { RootStackParamList } from "@/navigation/types";
 import { CancelAlertModal } from "@/components/CancelAlertModal";
+import { useCheckAlertStatus } from "./hooks/useCheckAlertStatus";
+import { useCancelAlert } from "./hooks/useCancelAlert";
 
 type Alert2Navigation = NativeStackNavigationProp<RootStackParamList, "Alert2">;
+type Alert2Route = RouteProp<RootStackParamList, "Alert2">;
 
 export function AlertScreen2() {
   const navigation = useNavigation<Alert2Navigation>();
+  const route = useRoute<Alert2Route>();
+  const alertId = route.params?.alertId;
   const [showCancelModal, setShowCancelModal] = useState(false);
+  
+  const { status, loading: statusLoading } = useCheckAlertStatus(alertId || null, !!alertId);
+  const { cancelAlert, loading: cancelLoading } = useCancelAlert();
   
   // Animated values for concentric circles
   const scale1 = useRef(new Animated.Value(1)).current;
@@ -75,28 +83,31 @@ export function AlertScreen2() {
     };
   }, []);
 
-  // Simulate responder response after 5 seconds
-  // In a real app, this would be triggered by an API response or state management
+  // Navigate based on alert status
   useEffect(() => {
-    const timer = setTimeout(() => {
-      // Simulate responder response
-      // In production, replace this with actual API call or state management
-      // Example: if (responderAccepted) { navigation.navigate("Alert3"); }
-      // Example: if (responderRejected) { navigation.navigate("AlertRejected"); }
-      
-      // For demo: randomly choose acceptance or rejection
-      // In production, use actual state/API response
-      const responderAccepted = Math.random() > 0.5; // Simulate 50/50 chance
-      
-      if (responderAccepted) {
-        navigation.navigate("Alert3");
-      } else {
-        navigation.navigate("AlertRejected");
-      }
-    }, 5000); // 5 seconds delay to simulate responder response
+    if (!status) return;
 
-    return () => clearTimeout(timer);
-  }, [navigation]);
+    if (status.status === "accepted" || status.responseStatus === "accepted") {
+      navigation.navigate("Alert3", { alertId });
+    } else if (status.status === "rejected" || status.responseStatus === "rejected") {
+      navigation.navigate("AlertRejected");
+    } else if (status.status === "canceled") {
+      navigation.navigate("Home");
+    }
+  }, [status, navigation, alertId]);
+
+  const handleCancel = async () => {
+    if (!alertId) {
+      navigation.navigate("Home");
+      return;
+    }
+
+    setShowCancelModal(false);
+    const success = await cancelAlert(alertId);
+    if (success) {
+      navigation.navigate("Home");
+    }
+  };
 
   return (
     <View className="flex-1 bg-[#0b376c] justify-center items-center px-6">
@@ -198,10 +209,7 @@ export function AlertScreen2() {
       {/* Cancel Alert Modal */}
       <CancelAlertModal
         visible={showCancelModal}
-        onConfirm={() => {
-          setShowCancelModal(false);
-          navigation.navigate("Home");
-        }}
+        onConfirm={handleCancel}
         onCancel={() => setShowCancelModal(false)}
       />
     </View>

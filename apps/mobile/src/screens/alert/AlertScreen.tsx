@@ -1,19 +1,23 @@
-import { View, Text, TouchableOpacity, Modal, Animated, PanResponder } from "react-native";
+import { View, Text, TouchableOpacity, Modal, Animated, PanResponder, ActivityIndicator } from "react-native";
 import { useState, useRef } from "react";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import * as Location from "expo-location";
 import type { RootStackParamList } from "@/navigation/types";
+import { useCreateAlert } from "./hooks/useCreateAlert";
 
 type AlertNavigation = NativeStackNavigationProp<RootStackParamList, "Alert">;
 
 export function AlertScreen() {
   const navigation = useNavigation<AlertNavigation>();
   const [sliderValue, setSliderValue] = useState(0);
+  const [isCreatingAlert, setIsCreatingAlert] = useState(false);
   const sliderWidth = 280; // Approximate slider track width
   const handleSize = 32;
   const maxX = sliderWidth - handleSize;
   const pan = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
+  const { createAlert, loading: createAlertLoading } = useCreateAlert();
 
   const panResponder = useRef(
     PanResponder.create({
@@ -32,12 +36,73 @@ export function AlertScreen() {
         const percentage = (newX / maxX) * 100;
         setSliderValue(percentage);
       },
-      onPanResponderRelease: () => {
+      onPanResponderRelease: async () => {
         const finalValue = (pan.x as any)._value;
         pan.flattenOffset();
         if ((finalValue / maxX) * 100 >= 90) {
-          // Alert sent - navigate to AlertScreen2
-          navigation.navigate("Alert2");
+          // Alert sent - get location and create alert
+          setIsCreatingAlert(true);
+          
+          try {
+            // Get current location
+            const { status } = await Location.requestForegroundPermissionsAsync();
+            let latitude = 0;
+            let longitude = 0;
+            let locationName: string | undefined;
+
+            if (status === "granted") {
+              try {
+                const location = await Location.getCurrentPositionAsync({});
+                latitude = location.coords.latitude;
+                longitude = location.coords.longitude;
+
+                // Reverse geocode to get location name
+                try {
+                  const reverseGeocode = await Location.reverseGeocodeAsync({
+                    latitude,
+                    longitude,
+                  });
+                  if (reverseGeocode.length > 0) {
+                    const addr = reverseGeocode[0];
+                    locationName = `${addr.street || ""} ${addr.city || ""} ${addr.region || ""}`.trim();
+                  }
+                } catch (e) {
+                  console.log("Reverse geocoding failed:", e);
+                }
+              } catch (e) {
+                console.log("Location fetch failed:", e);
+              }
+            }
+
+            // Create alert in database
+            const alertData = await createAlert({
+              latitude,
+              longitude,
+              locationName,
+            });
+
+            if (alertData) {
+              // Navigate to AlertScreen2 with alert ID
+              navigation.navigate("Alert2", { alertId: alertData.id });
+            } else {
+              // Reset slider if alert creation failed
+              Animated.spring(pan, {
+                toValue: { x: 0, y: 0 },
+                useNativeDriver: false,
+              }).start();
+              setSliderValue(0);
+            }
+          } catch (error) {
+            console.error("Error creating alert:", error);
+            // Reset slider on error
+            Animated.spring(pan, {
+              toValue: { x: 0, y: 0 },
+              useNativeDriver: false,
+            }).start();
+            setSliderValue(0);
+          } finally {
+            setIsCreatingAlert(false);
+          }
         } else {
           // Reset slider if not completed
           Animated.spring(pan, {
@@ -111,9 +176,18 @@ export function AlertScreen() {
           </View>
 
           {/* Slider text */}
-          <Text className="text-sm text-gray-600 text-center mb-8">
-            Slide to send alert
-          </Text>
+          {isCreatingAlert || createAlertLoading ? (
+            <View className="items-center mb-8">
+              <ActivityIndicator size="small" color="#0b376c" />
+              <Text className="text-sm text-gray-600 text-center mt-2">
+                Creating alert...
+              </Text>
+            </View>
+          ) : (
+            <Text className="text-sm text-gray-600 text-center mb-8">
+              Slide to send alert
+            </Text>
+          )}
 
           {/* BACK button */}
           <TouchableOpacity
