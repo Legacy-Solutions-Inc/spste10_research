@@ -25,6 +25,7 @@ export type RootStackParamList = {
     longitude: number;
     timestamp: string; // ISO string to avoid non-serializable warning
     locationName?: string;
+    aiDescription?: string; // AI-generated description of the emergency photo
   };
   Report4: { reportId: string };
   Report5: { reportId?: string };
