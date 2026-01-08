@@ -20,9 +20,6 @@
     },
     {
       "path": "./packages/core"
-    },
-    {
-      "path": "./packages/config"
     }
   ]
 }

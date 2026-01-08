@@ -1,5 +1,11 @@
 import { createClient } from "@/lib/supabaseServer";
 import { redirect } from "next/navigation";
+import Link from "next/link";
+
+export const metadata = {
+  title: "AGAP - Welcome",
+  description: "Welcome to AGAP",
+};
 
 export default async function Home() {
   const supabase = createClient();
@@ -7,22 +13,31 @@ export default async function Home() {
     data: { session },
   } = await supabase.auth.getSession();
 
-  if (!session) {
-    redirect("/login");
+  if (session) {
+    redirect("/dashboard");
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-24">
-      <div className="z-10 max-w-5xl w-full items-center justify-center font-mono text-sm">
-        <h1 className="text-4xl font-bold mb-4">Welcome to SPSTE10 Research</h1>
-        <p className="text-lg mb-4">You are authenticated!</p>
-        <div className="mt-4">
-          <p className="text-sm text-muted-foreground">
-            User ID: {session.user.id}
-          </p>
-          <p className="text-sm text-muted-foreground">
-            Email: {session.user.email}
-          </p>
+    <main className="min-h-screen bg-white flex items-center justify-center">
+      <div className="bg-white border border-blue-200 rounded-xl flex items-center justify-center p-12 w-full h-screen">
+        <div className="flex flex-col items-center w-full">
+          <h1 className="text-6xl font-extrabold text-blue-900 text-center mb-8">
+            AGAP
+          </h1>
+          <div className="flex flex-col space-y-4 w-full items-center">
+            <Link
+              href="/register"
+              className="bg-blue-900 text-white text-sm font-semibold rounded-full shadow-md py-3 px-6 w-[250px] text-center transition hover:opacity-90"
+            >
+              Create an account
+            </Link>
+            <Link
+              href="/login"
+              className="bg-blue-900 text-white text-sm font-semibold rounded-full shadow-md py-3 px-6 w-[250px] text-center transition hover:opacity-90"
+            >
+              Log In
+            </Link>
+          </div>
         </div>
       </div>
     </main>
