@@ -71,11 +71,12 @@ export function ReportScreen1() {
         setCapturedImage(photo.uri);
         const timestamp = new Date();
         // Navigate to next screen with image URI and location data
+        // Convert Date to ISO string for navigation (non-serializable warning)
         navigation.navigate("Report2", {
           imageUri: photo.uri,
           latitude,
           longitude,
-          timestamp,
+          timestamp: timestamp.toISOString(),
           locationName,
         });
       }

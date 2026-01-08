@@ -1,15 +1,33 @@
 import { View, Text, TouchableOpacity } from "react-native";
 import { useState } from "react";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "@/navigation/types";
 import { CancelAlertModal } from "@/components/CancelAlertModal";
+import { useCancelReport } from "./hooks/useCancelReport";
 
 type Report5Navigation = NativeStackNavigationProp<RootStackParamList, "Report5">;
+type Report5Route = RouteProp<RootStackParamList, "Report5">;
 
 export function ReportScreen5() {
   const navigation = useNavigation<Report5Navigation>();
+  const route = useRoute<Report5Route>();
+  const reportId = route.params?.reportId;
   const [showCancelModal, setShowCancelModal] = useState(false);
+  const { cancelReport, loading: cancelLoading } = useCancelReport();
+
+  const handleCancel = async () => {
+    if (!reportId) {
+      navigation.navigate("Home");
+      return;
+    }
+
+    setShowCancelModal(false);
+    const success = await cancelReport(reportId);
+    if (success) {
+      navigation.navigate("Home");
+    }
+  };
 
   return (
     <View className="flex-1 bg-white pt-12">
@@ -46,10 +64,7 @@ export function ReportScreen5() {
       {/* Cancel Alert Modal */}
       <CancelAlertModal
         visible={showCancelModal}
-        onConfirm={() => {
-          setShowCancelModal(false);
-          navigation.navigate("Home");
-        }}
+        onConfirm={handleCancel}
         onCancel={() => setShowCancelModal(false)}
       />
     </View>

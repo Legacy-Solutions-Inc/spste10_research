@@ -21,11 +21,12 @@ export function ReportScreen2() {
 
   const handleDone = () => {
     // Navigate to ReportScreen3 with all data
+    // timestamp is already a string from route params
     navigation.navigate("Report3", {
       imageUri,
       latitude,
       longitude,
-      timestamp,
+      timestamp: typeof timestamp === "string" ? timestamp : timestamp.toISOString(),
       locationName,
     });
   };
