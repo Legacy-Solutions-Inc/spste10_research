@@ -12,7 +12,7 @@ async function getUserProfile(supabase: any, userId: string) {
     .maybeSingle();
 
   if (error) {
-    console.error("[middleware] Error fetching profile:", error);
+    // console.error("[middleware] Error fetching profile:", error);
     return null;
   }
 
@@ -22,9 +22,9 @@ async function getUserProfile(supabase: any, userId: string) {
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next();
   
-  console.log("[middleware] === MIDDLEWARE START ===");
-  console.log("[middleware] Path:", req.nextUrl.pathname);
-  console.log("[middleware] Direct cookies check:", req.cookies.getAll().map(c => c.name).join(", ") || "NO COOKIES");
+  // console.log("[middleware] === MIDDLEWARE START ===");
+  // console.log("[middleware] Path:", req.nextUrl.pathname);
+  // console.log("[middleware] Direct cookies check:", req.cookies.getAll().map(c => c.name).join(", ") || "NO COOKIES");
 
   const supabase = createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -33,15 +33,15 @@ export async function middleware(req: NextRequest) {
       cookies: {
         getAll() {
           const cookies = req.cookies.getAll();
-          console.log("[middleware] getAll() called - Reading cookies:", cookies.length);
-          console.log("[middleware] Cookie names:", cookies.map(c => c.name).join(", ") || "NONE");
+          // console.log("[middleware] getAll() called - Reading cookies:", cookies.length);
+          // console.log("[middleware] Cookie names:", cookies.map(c => c.name).join(", ") || "NONE");
           return cookies.map(({ name, value }) => ({
             name,
             value,
           }));
         },
         setAll(cookiesToSet: Array<{ name: string; value: string; options?: any }>) {
-          console.log("[middleware] setAll() called - Setting cookies:", cookiesToSet.length);
+          // console.log("[middleware] setAll() called - Setting cookies:", cookiesToSet.length);
           cookiesToSet.forEach(({ name, value, options }) => {
             req.cookies.set(name, value);
             res.cookies.set(name, value, options);
@@ -51,13 +51,13 @@ export async function middleware(req: NextRequest) {
     }
   );
 
-  // Try to get session first
-  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-  console.log("[middleware] Session check:", { 
-    hasSession: !!session, 
-    hasUser: !!session?.user,
-    error: sessionError?.message 
-  });
+  // // Try to get session first
+  // const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+  // console.log("[middleware] Session check:", { 
+  //   hasSession: !!session, 
+  //   hasUser: !!session?.user,
+  //   error: sessionError?.message 
+  // });
 
   // Get authenticated user
   const {
@@ -65,16 +65,16 @@ export async function middleware(req: NextRequest) {
     error,
   } = await supabase.auth.getUser();
   
-  console.log("[middleware] User check:", { 
-    hasUser: !!user, 
-    userId: user?.id,
-    error: error?.message 
-  });
+  // console.log("[middleware] User check:", { 
+  //   hasUser: !!user, 
+  //   userId: user?.id,
+  //   error: error?.message 
+  // });
 
   // Only log non-session-missing errors
-  if (error && error.name !== "AuthSessionMissingError") {
-    console.error("[middleware] Auth user error:", error);
-  }
+  // if (error && error.name !== "AuthSessionMissingError") {
+  //   console.error("[middleware] Auth user error:", error);
+  // }
 
   const pathname = req.nextUrl.pathname;
 
@@ -82,11 +82,11 @@ export async function middleware(req: NextRequest) {
   const publicRoutes = ["/", "/login", "/register", "/forgot-password"];
   const isPublicRoute = publicRoutes.includes(pathname);
 
-  // If user is not authenticated and trying to access protected route
-  if (!user && !isPublicRoute) {
-    console.log("[middleware] Unauthenticated user trying to access:", pathname);
-    return NextResponse.redirect(new URL("/", req.url));
-  }
+  // // If user is not authenticated and trying to access protected route
+  // if (!user && !isPublicRoute) {
+  //   console.log("[middleware] Unauthenticated user trying to access:", pathname);
+  //   return NextResponse.redirect(new URL("/", req.url));
+  // }
 
   // If user is authenticated, handle routing based on role
   if (user) {
@@ -95,13 +95,13 @@ export async function middleware(req: NextRequest) {
 
     // If no profile exists, log out and redirect to home
     if (!profile) {
-      console.log("[middleware] User authenticated but no profile found:", user.id);
+      // console.log("[middleware] User authenticated but no profile found:", user.id);
       await supabase.auth.signOut();
       return NextResponse.redirect(new URL("/", req.url));
     }
 
     const userRole = profile.role;
-    console.log("[middleware] User role:", userRole, "Path:", pathname);
+    // console.log("[middleware] User role:", userRole, "Path:", pathname);
 
     // Check responder approval status if user is a responder
     if (userRole === "responder" && !pathname.startsWith("/admin")) {
@@ -115,7 +115,7 @@ export async function middleware(req: NextRequest) {
         const accountStatus = (responderProfile as { account_status: string }).account_status;
         
         if (accountStatus === "pending" || accountStatus === "rejected") {
-          console.log("[middleware] Responder account not approved:", accountStatus);
+          // console.log("[middleware] Responder account not approved:", accountStatus);
           await supabase.auth.signOut();
           return NextResponse.redirect(new URL("/", req.url));
         }
@@ -125,29 +125,29 @@ export async function middleware(req: NextRequest) {
     // Redirect authenticated users away from auth pages
     if (pathname === "/login" || pathname === "/register" || pathname === "/forgot-password") {
       const destination = userRole === "admin" ? "/admin" : "/dashboard";
-      console.log("[middleware] Redirecting authenticated user to:", destination);
+      // console.log("[middleware] Redirecting authenticated user to:", destination);
       return NextResponse.redirect(new URL(destination, req.url));
     }
 
     // Redirect authenticated users from home page
     if (pathname === "/") {
       const destination = userRole === "admin" ? "/admin" : "/dashboard";
-      console.log("[middleware] Redirecting from home to:", destination);
+      // console.log("[middleware] Redirecting from home to:", destination);
       return NextResponse.redirect(new URL(destination, req.url));
     }
 
     // Protect admin routes
     if (pathname.startsWith("/admin")) {
       if (userRole !== "admin") {
-        console.log("[middleware] Non-admin user blocked from admin route");
+        // console.log("[middleware] Non-admin user blocked from admin route");
         return NextResponse.redirect(new URL("/dashboard", req.url));
       }
-      console.log("[middleware] Admin access granted to:", pathname);
+      // console.log("[middleware] Admin access granted to:", pathname);
     }
 
     // Protect dashboard routes - ensure non-admin users can't access admin
     if (pathname.startsWith("/dashboard") && userRole === "admin") {
-      console.log("[middleware] Redirecting admin to admin dashboard");
+      // console.log("[middleware] Redirecting admin to admin dashboard");
       return NextResponse.redirect(new URL("/admin", req.url));
     }
   }
