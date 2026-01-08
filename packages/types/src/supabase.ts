@@ -17,14 +17,36 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
+export type user_role = 'user' | 'responder' | 'admin'
+
 export interface Database {
   public: {
     Tables: {
-      // Add your table types here after generating
-      [key: string]: {
-        Row: Record<string, unknown>
-        Insert: Record<string, unknown>
-        Update: Record<string, unknown>
+      profiles: {
+        Row: {
+          id: string
+          full_name: string | null
+          avatar_url: string | null
+          role: user_role
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id: string
+          full_name?: string | null
+          avatar_url?: string | null
+          role?: user_role
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          full_name?: string | null
+          avatar_url?: string | null
+          role?: user_role
+          created_at?: string
+          updated_at?: string
+        }
       }
     }
     Views: {
@@ -33,13 +55,13 @@ export interface Database {
       }
     }
     Functions: {
-      [key: string]: {
-        Args: Record<string, unknown>
-        Returns: unknown
+      get_user_role: {
+        Args: Record<PropertyKey, never>
+        Returns: user_role | null
       }
     }
     Enums: {
-      [key: string]: string
+      user_role: user_role
     }
   }
 }
