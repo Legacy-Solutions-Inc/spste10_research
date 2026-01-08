@@ -1,5 +1,3 @@
-import { createClient } from "@/lib/supabaseServer";
-import { redirect } from "next/navigation";
 import Link from "next/link";
 import LoginForm from "./LoginForm";
 
@@ -9,15 +7,7 @@ export const metadata = {
 };
 
 export default async function LoginPage() {
-  const supabase = createClient();
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  if (session) {
-    redirect("/dashboard");
-  }
-
+  // Authentication check is handled by middleware
   return (
     <main className="min-h-screen bg-white border border-blue-200 rounded-xl flex items-center justify-center">
       <div className="flex flex-col items-center space-y-4">

@@ -6,12 +6,12 @@ import SettingsForm from "./SettingsForm";
 
 interface ProfileData {
   id?: string;
-  name?: string;
-  municipality?: string;
-  province?: string;
-  office_address?: string;
-  email?: string;
-  contact_number?: string;
+  full_name?: string | null;
+  municipality?: string | null;
+  province?: string | null;
+  office_address?: string | null;
+  email?: string | null;
+  contact_number?: string | null;
 }
 
 interface SettingsClientProps {

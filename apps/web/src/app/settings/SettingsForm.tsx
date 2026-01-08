@@ -6,12 +6,12 @@ import { useRouter } from "next/navigation";
 
 interface ProfileData {
   id?: string;
-  name?: string;
-  municipality?: string;
-  province?: string;
-  office_address?: string;
-  email?: string;
-  contact_number?: string;
+  full_name?: string | null;
+  municipality?: string | null;
+  province?: string | null;
+  office_address?: string | null;
+  email?: string | null;
+  contact_number?: string | null;
 }
 
 interface SettingsFormProps {
@@ -22,7 +22,7 @@ interface SettingsFormProps {
 export default function SettingsForm({ initialData, userEmail }: SettingsFormProps) {
   const router = useRouter();
   const [formData, setFormData] = useState({
-    name: initialData?.name || "",
+    fullName: initialData?.full_name || "",
     municipality: initialData?.municipality || "",
     province: initialData?.province || "",
     officeAddress: initialData?.office_address || "",
@@ -40,7 +40,7 @@ export default function SettingsForm({ initialData, userEmail }: SettingsFormPro
   // Track if form has changes
   useEffect(() => {
     const hasFormChanges =
-      formData.name !== (initialData?.name || "") ||
+      formData.fullName !== (initialData?.full_name || "") ||
       formData.municipality !== (initialData?.municipality || "") ||
       formData.province !== (initialData?.province || "") ||
       formData.officeAddress !== (initialData?.office_address || "") ||
@@ -106,46 +106,66 @@ export default function SettingsForm({ initialData, userEmail }: SettingsFormPro
         }
       }
 
-      // Update profile data
-      // Note: This assumes a 'profiles' table exists in Supabase
-      // If the table doesn't exist, only password updates will work
+      // Update profile data (full_name in profiles table)
       const profileUpdate = {
-        name: formData.name,
-        municipality: formData.municipality,
-        province: formData.province,
-        office_address: formData.officeAddress,
-        contact_number: formData.contactNumber,
-        updated_at: new Date().toISOString(),
+        full_name: formData.fullName || null,
       };
 
-      try {
-        const { error: profileError } = await supabase
-          .from("profiles")
-          .upsert({
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update(profileUpdate)
+        .eq("id", user.id);
+
+      if (profileError) {
+        setError(profileError.message || "Failed to update profile");
+        setLoading(false);
+        return;
+      }
+
+      // Update responder_profiles if responder fields are provided
+      const responderFields = {
+        municipality: formData.municipality || null,
+        province: formData.province || null,
+        office_address: formData.officeAddress || null,
+        contact_number: formData.contactNumber || null,
+      };
+
+      // Check if responder profile exists
+      const { data: existingResponderProfile } = await supabase
+        .from("responder_profiles")
+        .select("id")
+        .eq("id", user.id)
+        .single();
+
+      if (existingResponderProfile) {
+        // Update existing responder profile
+        const { error: responderError } = await supabase
+          .from("responder_profiles")
+          .update(responderFields)
+          .eq("id", user.id);
+
+        if (responderError) {
+          console.error("Error updating responder profile:", responderError);
+          // Don't fail the whole update, but log the error
+        }
+      } else if (
+        formData.municipality ||
+        formData.province ||
+        formData.officeAddress ||
+        formData.contactNumber
+      ) {
+        // Create new responder profile if any responder fields are provided
+        const { error: responderError } = await supabase
+          .from("responder_profiles")
+          .insert({
             id: user.id,
-            email: user.email,
-            ...profileUpdate,
+            ...responderFields,
+            account_status: "pending",
           });
 
-        if (profileError) {
-          // If profiles table doesn't exist, only allow password updates
-          if (!formData.password) {
-            setError(
-              "Profile update failed. The profiles table may not be set up yet. Password updates are still available."
-            );
-            setLoading(false);
-            return;
-          }
-          // If password was updated successfully, show success even if profile update failed
-        }
-      } catch (err) {
-        // Profiles table doesn't exist - only show error if no password was updated
-        if (!formData.password) {
-          setError(
-            "Unable to update profile. The profiles table may not be configured. Password updates are still available."
-          );
-          setLoading(false);
-          return;
+        if (responderError) {
+          console.error("Error creating responder profile:", responderError);
+          // Don't fail the whole update, but log the error
         }
       }
 
@@ -171,17 +191,17 @@ export default function SettingsForm({ initialData, userEmail }: SettingsFormPro
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4 max-w-xl mx-auto mt-6 bg-white p-6 rounded-lg shadow-md">
-      {/* Name */}
+      {/* Full Name */}
       <div>
         <label className="text-sm font-medium text-blue-900 mb-1 block">
-          Name
+          Full Name
         </label>
         <input
           type="text"
-          name="name"
-          value={formData.name}
+          name="fullName"
+          value={formData.fullName}
           onChange={handleChange}
-          placeholder="Enter the name of the office"
+          placeholder="Enter your full name"
           className="w-full py-2 px-4 border border-blue-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>

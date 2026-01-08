@@ -18,6 +18,7 @@ export type Json =
   | Json[]
 
 export type user_role = 'user' | 'responder' | 'admin'
+export type account_status = 'pending' | 'approved' | 'rejected'
 
 export interface Database {
   public: {
@@ -25,6 +26,7 @@ export interface Database {
       profiles: {
         Row: {
           id: string
+          email: string | null
           full_name: string | null
           avatar_url: string | null
           role: user_role
@@ -33,6 +35,7 @@ export interface Database {
         }
         Insert: {
           id: string
+          email?: string | null
           full_name?: string | null
           avatar_url?: string | null
           role?: user_role
@@ -41,9 +44,42 @@ export interface Database {
         }
         Update: {
           id?: string
+          email?: string | null
           full_name?: string | null
           avatar_url?: string | null
           role?: user_role
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      responder_profiles: {
+        Row: {
+          id: string
+          municipality: string | null
+          province: string | null
+          office_address: string | null
+          contact_number: string | null
+          account_status: account_status
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id: string
+          municipality?: string | null
+          province?: string | null
+          office_address?: string | null
+          contact_number?: string | null
+          account_status?: account_status
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          municipality?: string | null
+          province?: string | null
+          office_address?: string | null
+          contact_number?: string | null
+          account_status?: account_status
           created_at?: string
           updated_at?: string
         }
@@ -62,6 +98,7 @@ export interface Database {
     }
     Enums: {
       user_role: user_role
+      account_status: account_status
     }
   }
 }
