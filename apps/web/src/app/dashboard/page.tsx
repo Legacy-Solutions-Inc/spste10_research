@@ -19,11 +19,18 @@ export default async function DashboardPage() {
 
   // Get user role
   // @ts-ignore - Supabase types may not be fully generated
-  const { data: profile } = await supabase
+  const { data: profileRaw } = await supabase
     .from("profiles")
     .select("role")
     .eq("id", session.user.id)
     .single();
+
+  // Type assertion for profile data
+  type ProfileData = {
+    role: string | null;
+  } | null;
+
+  const profile = profileRaw as ProfileData;
 
   // Dashboard is for responders - admins should be redirected to admin page
   // (This is also handled by middleware, but good to have here too)
