@@ -2,14 +2,14 @@
 
 interface ResponderAccount {
   id: string;
-  email: string;
-  name?: string;
-  municipality?: string;
-  province?: string;
-  office_address?: string;
-  contact_number?: string;
-  account_status?: "pending" | "approved" | "rejected";
-  created_at?: string;
+  email: string | null;
+  full_name: string | null;
+  municipality: string | null;
+  province: string | null;
+  office_address: string | null;
+  contact_number: string | null;
+  account_status: "pending" | "approved" | "rejected";
+  created_at: string;
 }
 
 interface ResponderAccountCardProps {
@@ -23,7 +23,7 @@ export default function ResponderAccountCard({
   onApprove,
   onReject,
 }: ResponderAccountCardProps) {
-  const status = account.account_status || "pending";
+  const status = account.account_status;
   const isPending = status === "pending";
   const isApproved = status === "approved";
   const isRejected = status === "rejected";
@@ -54,9 +54,9 @@ export default function ResponderAccountCard({
       <div className="flex justify-between items-start mb-4">
         <div className="flex-1">
           <h3 className="text-lg font-semibold text-blue-900 mb-1">
-            {account.name || "Unnamed Office"}
+            {account.full_name || "Unnamed User"}
           </h3>
-          <p className="text-sm text-gray-600">{account.email}</p>
+          <p className="text-sm text-gray-600">{account.email || "No email"}</p>
         </div>
         <div>
           {isPending && (

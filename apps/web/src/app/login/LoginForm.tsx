@@ -2,11 +2,9 @@
 
 import { useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
-import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabaseBrowser";
 
 export default function LoginForm() {
-  const router = useRouter();
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -57,10 +55,21 @@ export default function LoginForm() {
         return;
       }
 
-      if (data.session) {
-        // Successful login - navigate to dashboard
-        router.push("/dashboard");
-        router.refresh(); // Refresh to update server-side session
+      if (data.session && data.user) {
+        console.log("[LoginForm] Login successful:", {
+          hasSession: !!data.session,
+          hasUser: !!data.user,
+          userId: data.user.id,
+          cookies: document.cookie
+        });
+        
+        // Wait a moment for cookies to be set
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // Authentication and authorization checks are handled by middleware
+        // Use window.location for full page reload to ensure cookies are set
+        // Middleware will handle role-based redirects
+        window.location.href = "/dashboard";
       }
     } catch (err) {
       setError("An unexpected error occurred. Please try again.");

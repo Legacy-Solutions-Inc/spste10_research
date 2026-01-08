@@ -7,55 +7,18 @@ import { createClient } from "@/lib/supabaseBrowser";
 
 interface ResponderAccount {
   id: string;
-  email: string;
-  name?: string;
-  municipality?: string;
-  province?: string;
-  office_address?: string;
-  contact_number?: string;
-  account_status?: "pending" | "approved" | "rejected";
-  created_at?: string;
+  email: string | null;
+  full_name: string | null;
+  municipality: string | null;
+  province: string | null;
+  office_address: string | null;
+  contact_number: string | null;
+  account_status: "pending" | "approved" | "rejected";
+  created_at: string;
 }
 
-const getMockAccounts = (): ResponderAccount[] => {
-  return [
-    {
-      id: "1",
-      email: "responder1@example.com",
-      name: "Municipality Office A",
-      municipality: "Lambunao",
-      province: "Iloilo",
-      office_address: "Poblacion Ilawod, Lambunao, Iloilo",
-      contact_number: "+63 912 345 6789",
-      account_status: "pending",
-      created_at: new Date(Date.now() - 86400000).toISOString(),
-    },
-    {
-      id: "2",
-      email: "responder2@example.com",
-      name: "Municipality Office B",
-      municipality: "Santa Barbara",
-      province: "Iloilo",
-      office_address: "Santa Barbara, Iloilo",
-      contact_number: "+63 912 345 6790",
-      account_status: "pending",
-      created_at: new Date(Date.now() - 172800000).toISOString(),
-    },
-    {
-      id: "3",
-      email: "responder3@example.com",
-      name: "Municipality Office C",
-      municipality: "Pavia",
-      province: "Iloilo",
-      office_address: "Pavia, Iloilo",
-      contact_number: "+63 912 345 6791",
-      account_status: "approved",
-      created_at: new Date(Date.now() - 259200000).toISOString(),
-    },
-  ];
-};
-
 export default function AdminClient() {
+  const [allAccounts, setAllAccounts] = useState<ResponderAccount[]>([]);
   const [accounts, setAccounts] = useState<ResponderAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -67,38 +30,103 @@ export default function AdminClient() {
       setError("");
       const supabase = createClient();
 
-      // Fetch all profiles (responders)
-      // In production, add proper filtering and pagination
-      const { data, error: fetchError } = await supabase
+      // Fetch profiles with responder_profiles joined
+      // Only get profiles that have responder_profiles (role='responder')
+      // @ts-ignore - Supabase types may not be fully generated
+      const { data: profilesRaw, error: profilesError } = await supabase
         .from("profiles")
-        .select("*")
+        .select(`
+          id,
+          email,
+          full_name,
+          role,
+          created_at,
+          responder_profiles (
+            municipality,
+            province,
+            office_address,
+            contact_number,
+            account_status,
+            created_at
+          )
+        `)
+        .eq("role", "responder")
         .order("created_at", { ascending: false });
 
-      let accountsToFilter: ResponderAccount[] = [];
-
-      if (fetchError) {
-        // If profiles table doesn't exist, use mock data for demo
-        console.warn("Profiles table may not exist. Using mock data:", fetchError);
-        accountsToFilter = getMockAccounts();
-      } else if (data && data.length > 0) {
-        accountsToFilter = data as ResponderAccount[];
-      } else {
-        // Use mock data if no data found
-        accountsToFilter = getMockAccounts();
+      if (profilesError) {
+        console.error("Error fetching profiles:", profilesError);
+        setError("Failed to fetch accounts: " + profilesError.message);
+        setAllAccounts([]);
+        setAccounts([]);
+        return;
       }
 
-      // Apply filter
+      // Type assertion for profiles data
+      type ProfileWithResponderProfile = {
+        id: string;
+        email: string | null;
+        full_name: string | null;
+        role: string | null;
+        created_at: string;
+        responder_profiles: {
+          municipality: string | null;
+          province: string | null;
+          office_address: string | null;
+          contact_number: string | null;
+          account_status: "pending" | "approved" | "rejected";
+          created_at: string;
+        } | {
+          municipality: string | null;
+          province: string | null;
+          office_address: string | null;
+          contact_number: string | null;
+          account_status: "pending" | "approved" | "rejected";
+          created_at: string;
+        }[] | null;
+      };
+
+      const profiles = profilesRaw as ProfileWithResponderProfile[] | null;
+
+      // Transform the data to match ResponderAccount interface
+      const allAccountsData: ResponderAccount[] = (profiles || [])
+        .filter((profile): profile is ProfileWithResponderProfile => 
+          profile !== null && profile !== undefined && profile.responder_profiles !== null
+        ) // Only include profiles with responder_profiles
+        .map((profile) => {
+          const responderProfile = Array.isArray(profile.responder_profiles)
+            ? profile.responder_profiles[0]
+            : profile.responder_profiles;
+
+          return {
+            id: profile.id,
+            email: profile.email,
+            full_name: profile.full_name,
+            municipality: responderProfile?.municipality || null,
+            province: responderProfile?.province || null,
+            office_address: responderProfile?.office_address || null,
+            contact_number: responderProfile?.contact_number || null,
+            account_status: responderProfile?.account_status || "pending",
+            created_at: profile.created_at,
+          };
+        });
+
+      // Store all accounts
+      setAllAccounts(allAccountsData);
+
+      // Apply filter to get displayed accounts
       if (filter !== "all") {
-        accountsToFilter = accountsToFilter.filter(
-          (account) => (account.account_status || "pending") === filter
+        const filtered = allAccountsData.filter(
+          (account) => account.account_status === filter
         );
+        setAccounts(filtered);
+      } else {
+        setAccounts(allAccountsData);
       }
-      setAccounts(accountsToFilter);
     } catch (err) {
       console.error("Error fetching accounts:", err);
-      setError("Failed to fetch accounts. Using mock data for demonstration.");
-      // Use mock data as fallback
-      setAccounts(getMockAccounts());
+      setError("Failed to fetch accounts: " + (err instanceof Error ? err.message : "Unknown error"));
+      setAllAccounts([]);
+      setAccounts([]);
     } finally {
       setLoading(false);
     }
@@ -111,86 +139,56 @@ export default function AdminClient() {
   const handleApprove = async (accountId: string) => {
     try {
       const supabase = createClient();
+      // Update responder_profiles account_status to 'approved'
+      // Profile role is already 'responder' (set during registration)
       const { error: updateError } = await supabase
-        .from("profiles")
-        .update({ account_status: "approved", updated_at: new Date().toISOString() })
+        .from("responder_profiles")
+        // @ts-ignore - Supabase types may not be fully generated
+        .update({ account_status: "approved" })
         .eq("id", accountId);
 
       if (updateError) {
         console.error("Error approving account:", updateError);
-        alert("Failed to approve account. This is a demo - in production, this would update the database.");
+        alert("Failed to approve account: " + updateError.message);
       } else {
-        // Update local state and remove from list if filter is pending
-      if (filter === "pending") {
-        setAccounts((prev) => prev.filter((account) => account.id !== accountId));
-      } else {
-        setAccounts((prev) =>
-          prev.map((account) =>
-            account.id === accountId ? { ...account, account_status: "approved" } : account
-          )
-        );
-      }
-      alert("Account approved successfully!");
+        alert("Account approved successfully!");
+        // Refresh data from server to get updated counts
+        await fetchAccounts();
       }
     } catch (err) {
       console.error("Error approving account:", err);
-      alert("Failed to approve account. This is a demo - in production, this would update the database.");
-      // Update local state anyway for demo purposes
-      if (filter === "pending") {
-        setAccounts((prev) => prev.filter((account) => account.id !== accountId));
-      } else {
-        setAccounts((prev) =>
-          prev.map((account) =>
-            account.id === accountId ? { ...account, account_status: "approved" } : account
-          )
-        );
-      }
+      alert("Failed to approve account. Please try again.");
     }
   };
 
   const handleReject = async (accountId: string) => {
     try {
       const supabase = createClient();
+      // Update responder_profiles account_status to 'rejected'
       const { error: updateError } = await supabase
-        .from("profiles")
-        .update({ account_status: "rejected", updated_at: new Date().toISOString() })
+        .from("responder_profiles")
+        // @ts-ignore - Supabase types may not be fully generated
+        .update({ account_status: "rejected" })
         .eq("id", accountId);
 
       if (updateError) {
         console.error("Error rejecting account:", updateError);
-        alert("Failed to reject account. This is a demo - in production, this would update the database.");
+        alert("Failed to reject account: " + updateError.message);
       } else {
-        // Update local state and remove from list if filter is pending
-      if (filter === "pending") {
-        setAccounts((prev) => prev.filter((account) => account.id !== accountId));
-      } else {
-        setAccounts((prev) =>
-          prev.map((account) =>
-            account.id === accountId ? { ...account, account_status: "rejected" } : account
-          )
-        );
-      }
-      alert("Account rejected.");
+        alert("Account rejected.");
+        // Refresh data from server to get updated counts
+        await fetchAccounts();
       }
     } catch (err) {
       console.error("Error rejecting account:", err);
-      alert("Failed to reject account. This is a demo - in production, this would update the database.");
-      // Update local state anyway for demo purposes
-      if (filter === "pending") {
-        setAccounts((prev) => prev.filter((account) => account.id !== accountId));
-      } else {
-        setAccounts((prev) =>
-          prev.map((account) =>
-            account.id === accountId ? { ...account, account_status: "rejected" } : account
-          )
-        );
-      }
+      alert("Failed to reject account. Please try again.");
     }
   };
 
-  const pendingCount = accounts.filter((a) => (a.account_status || "pending") === "pending").length;
-  const approvedCount = accounts.filter((a) => a.account_status === "approved").length;
-  const rejectedCount = accounts.filter((a) => a.account_status === "rejected").length;
+  // Calculate counts from all accounts, not filtered accounts
+  const pendingCount = allAccounts.filter((a) => a.account_status === "pending").length;
+  const approvedCount = allAccounts.filter((a) => a.account_status === "approved").length;
+  const rejectedCount = allAccounts.filter((a) => a.account_status === "rejected").length;
 
   return (
     <div className="flex min-h-screen overflow-hidden">

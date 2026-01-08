@@ -51,16 +51,49 @@ export default function AlertsList({
                 className={`text-sm font-semibold ${
                   alert.type === "Emergency Alert"
                     ? "text-red-600"
-                    : "text-red-600"
+                    : "text-orange-600"
                 }`}
               >
                 {alert.type}
               </span>
+              {alert.isAssigned && (
+                <span
+                  className={`text-xs px-2 py-1 rounded ${
+                    alert.assignmentStatus === "accepted"
+                      ? "bg-green-100 text-green-700"
+                      : alert.assignmentStatus === "rejected"
+                      ? "bg-red-100 text-red-700"
+                      : "bg-yellow-100 text-yellow-700"
+                  }`}
+                >
+                  {alert.assignmentStatus === "accepted"
+                    ? "Accepted"
+                    : alert.assignmentStatus === "rejected"
+                    ? "Rejected"
+                    : "Pending"}
+                </span>
+              )}
             </div>
             <div className="text-sm text-gray-700">
               <p className="font-medium mb-1">Location:</p>
               <p className="text-gray-600">{alert.location}</p>
             </div>
+            {alert.name && (
+              <div className="text-sm text-gray-700 mt-2">
+                <p className="font-medium mb-1">Victim:</p>
+                <p className="text-gray-600">
+                  {alert.name}
+                  {alert.age && `, ${alert.age} years old`}
+                  {alert.bloodType && `, Blood Type: ${alert.bloodType}`}
+                </p>
+              </div>
+            )}
+            {alert.description && (
+              <div className="text-sm text-gray-700 mt-2">
+                <p className="font-medium mb-1">Description:</p>
+                <p className="text-gray-600 line-clamp-2">{alert.description}</p>
+              </div>
+            )}
             <div className="text-xs text-gray-500 mt-2">
               {formatTimestamp(alert.timestamp)}
             </div>

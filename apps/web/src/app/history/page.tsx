@@ -8,14 +8,14 @@ export const metadata = {
 };
 
 export default async function HistoryPage() {
-  // const supabase = createClient();
-  // const {
-  //   data: { session },
-  // } = await supabase.auth.getSession();
+  const supabase = createClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
 
-  // if (!session) {
-  //   redirect("/");
-  // }
+  if (!session) {
+    redirect("/");
+  }
 
   return <HistoryClient />;
 }

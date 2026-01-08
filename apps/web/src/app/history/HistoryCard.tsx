@@ -1,13 +1,6 @@
 "use client";
 
-interface HistoryItem {
-  id: string;
-  name: string;
-  location: string;
-  time: string;
-  type: "Emergency Alert" | "Emergency Report";
-  status: "accepted" | "dismissed";
-}
+import type { HistoryItem } from "./utils";
 
 interface HistoryCardProps {
   report: HistoryItem;

@@ -1,5 +1,3 @@
-import { createClient } from "@/lib/supabaseServer";
-import { redirect } from "next/navigation";
 import Link from "next/link";
 import ForgotPasswordForm from "./ForgotPasswordForm";
 
@@ -9,16 +7,7 @@ export const metadata = {
 };
 
 export default async function ForgotPasswordPage() {
-  const supabase = createClient();
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  // Optionally redirect if already logged in
-  if (session) {
-    redirect("/dashboard");
-  }
-
+  // Authentication check is handled by middleware
   return (
     <main className="min-h-screen bg-white border border-blue-200 rounded-xl flex items-center justify-center px-4">
       <div className="flex flex-col items-center">
