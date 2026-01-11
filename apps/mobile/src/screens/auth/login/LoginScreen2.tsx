@@ -71,7 +71,7 @@ export function LoginScreen2() {
           <View className="mb-3 px-2">
             <TextInput
               className="h-11 rounded-full border border-[#1b4f8f]/40 px-4 text-sm text-gray-900 bg-white"
-              placeholder="email"
+              placeholder="Email"
               placeholderTextColor="#a0aec0"
               value={email}
               onChangeText={setEmail}
