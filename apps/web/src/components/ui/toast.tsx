@@ -20,7 +20,8 @@ const Toast = React.forwardRef<HTMLDivElement, ToastProps>(
       error: "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-900 dark:text-red-100",
     };
 
-    const Icon = variant === "success" ? CheckCircle2 : variant === "error" ? XCircle : null;
+    const IconComponent = (variant === "success" ? CheckCircle2 : variant === "error" ? XCircle : null) as any;
+    const CloseIcon = X as any;
 
     return (
       <div
@@ -33,7 +34,7 @@ const Toast = React.forwardRef<HTMLDivElement, ToastProps>(
         {...props}
       >
         <div className="grid gap-1">
-          {Icon && <Icon className="h-4 w-4" />}
+          {IconComponent && <IconComponent className="h-4 w-4" />}
           {title && (
             <div className="text-sm font-semibold">{title}</div>
           )}
@@ -44,7 +45,7 @@ const Toast = React.forwardRef<HTMLDivElement, ToastProps>(
             className="absolute right-2 top-2 rounded-md p-1 text-foreground/50 opacity-0 transition-opacity hover:text-foreground focus:opacity-100 focus:outline-none focus:ring-2 group-hover:opacity-100"
             onClick={onDismiss}
           >
-            <X className="h-4 w-4" />
+            <CloseIcon className="h-4 w-4" />
           </button>
         )}
       </div>
