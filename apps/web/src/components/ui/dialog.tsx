@@ -193,7 +193,7 @@ const DialogClose = React.forwardRef<HTMLButtonElement, DialogCloseProps>(
         )}
         {...props}
       >
-        {children || <X className="h-4 w-4" />}
+        {children ? children : <X className="h-4 w-4" />}
       </button>
     );
   }
