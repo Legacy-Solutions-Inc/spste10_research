@@ -103,6 +103,12 @@ export async function middleware(req: NextRequest) {
     const userRole = profile.role;
     // console.log("[middleware] User role:", userRole, "Path:", pathname);
 
+    // Block user role from accessing web app
+    if (userRole === "user" && !isPublicRoute) {
+      await supabase.auth.signOut();
+      return NextResponse.redirect(new URL("/?error=access_denied", req.url));
+    }
+
     // Check responder approval status if user is a responder
     if (userRole === "responder" && !pathname.startsWith("/admin")) {
       const { data: responderProfile, error: responderError } = await supabase

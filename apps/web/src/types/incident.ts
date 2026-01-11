@@ -58,6 +58,7 @@ export interface Incident {
   created_at: string;
   updated_at: string;
   canceled_at: string | null;
+  user_id?: string; // User who created the alert/report
   // Alert-specific fields
   victim_name?: string | null;
   victim_age?: number | null;
@@ -85,6 +86,7 @@ export function alertToIncident(alert: AlertRow, assignment?: ResponderAssignmen
     created_at: alert.created_at,
     updated_at: alert.updated_at,
     canceled_at: alert.canceled_at,
+    user_id: alert.user_id,
     victim_name: alert.victim_name,
     victim_age: alert.victim_age,
     victim_blood_type: alert.victim_blood_type,
@@ -108,6 +110,7 @@ export function reportToIncident(report: ReportRow, assignment?: ResponderAssign
     created_at: report.created_at,
     updated_at: report.updated_at,
     canceled_at: report.canceled_at,
+    user_id: report.user_id,
     image_url: report.image_url,
     description: report.description,
     assignment: assignment || null,

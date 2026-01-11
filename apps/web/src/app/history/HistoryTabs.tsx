@@ -11,12 +11,12 @@ import { Inbox } from "lucide-react";
 export default function HistoryTabs() {
   const [selectedItem, setSelectedItem] = useState<HistoryItem | null>(null);
   
-  const { incidents, reporterNames, loading, error } = useFetchHistory();
+  const { incidents, reporterNames, alertCreatorNames, loading, error } = useFetchHistory();
 
   // Convert incidents to HistoryItem format
   const historyItems = useMemo(() => {
-    return incidents.map((incident) => incidentToHistoryItem(incident, reporterNames));
-  }, [incidents, reporterNames]);
+    return incidents.map((incident) => incidentToHistoryItem(incident, reporterNames, alertCreatorNames));
+  }, [incidents, reporterNames, alertCreatorNames]);
 
   // Filter by status
   const acceptedItems = useMemo(() => {

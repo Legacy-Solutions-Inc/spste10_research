@@ -97,10 +97,40 @@ export default function LoginForm() {
       }
 
       if (data.session && data.user) {
+        // Check user role
+        const { data: profile, error: profileError } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", data.user.id)
+          .single();
+
+        if (profileError || !profile) {
+          setErrors({
+            general: "Failed to verify account. Please try again.",
+          });
+          await supabase.auth.signOut();
+          setLoading(false);
+          return;
+        }
+
+        const userRole = profile.role;
+        
+        // Block user role from web app
+        if (userRole === "user") {
+          await supabase.auth.signOut();
+          setErrors({
+            general: "Access denied. This account is for mobile app only. Please use the mobile application to log in.",
+          });
+          setLoading(false);
+          return;
+        }
+
+        // Allow responder and admin roles to proceed
         console.log("[LoginForm] Login successful:", {
           hasSession: !!data.session,
           hasUser: !!data.user,
           userId: data.user.id,
+          userRole: userRole,
           cookies: document.cookie
         });
         

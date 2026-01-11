@@ -8,6 +8,7 @@ import { alertToIncident, reportToIncident } from "@/types/incident";
 export function useFetchHistory() {
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [reporterNames, setReporterNames] = useState<Map<string, string>>(new Map());
+  const [alertCreatorNames, setAlertCreatorNames] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -109,35 +110,50 @@ export function useFetchHistory() {
           }
         }
 
-        // Fetch reporter names for reports and create map: report_id -> reporter_name
-        const reporterNamesMap = new Map<string, string>();
-        if (reportsData.length > 0) {
-          const userIds = [...new Set(reportsData.map((r) => r.user_id))];
-          
+        // Fetch all user IDs (from both alerts and reports)
+        const allUserIds = [
+          ...new Set([
+            ...alertsData.map((a) => a.user_id),
+            ...reportsData.map((r) => r.user_id),
+          ]),
+        ];
+
+        // Fetch user names from profiles
+        const userIdToNameMap = new Map<string, string>();
+        if (allUserIds.length > 0) {
           // @ts-ignore - Supabase types may not be fully generated
           const { data: profilesData, error: profilesError } = await supabase
             .from("profiles")
             .select("id, full_name")
-            .in("id", userIds);
+            .in("id", allUserIds);
 
           if (!profilesError && profilesData) {
             // Create map: user_id -> full_name
-            const userIdToNameMap = new Map<string, string>();
             profilesData.forEach((profile: { id: string; full_name: string | null }) => {
               if (profile.full_name) {
                 userIdToNameMap.set(profile.id, profile.full_name);
               }
             });
-
-            // Create map: report_id -> reporter_name
-            reportsData.forEach((report) => {
-              const reporterName = userIdToNameMap.get(report.user_id);
-              if (reporterName) {
-                reporterNamesMap.set(report.id, reporterName);
-              }
-            });
           }
         }
+
+        // Create map: report_id -> reporter_name
+        const reporterNamesMap = new Map<string, string>();
+        reportsData.forEach((report) => {
+          const reporterName = userIdToNameMap.get(report.user_id);
+          if (reporterName) {
+            reporterNamesMap.set(report.id, reporterName);
+          }
+        });
+
+        // Create map: alert_id -> alert_creator_name
+        const alertCreatorNamesMap = new Map<string, string>();
+        alertsData.forEach((alert) => {
+          const creatorName = userIdToNameMap.get(alert.user_id);
+          if (creatorName) {
+            alertCreatorNamesMap.set(alert.id, creatorName);
+          }
+        });
 
         // Convert alerts to incidents
         const alertIncidents: Incident[] = alertsData.map((alert: AlertRow) => {
@@ -158,6 +174,7 @@ export function useFetchHistory() {
 
         setIncidents(allIncidents);
         setReporterNames(reporterNamesMap);
+        setAlertCreatorNames(alertCreatorNamesMap);
       } catch (err) {
         console.error("Error fetching history:", err);
         setError(err instanceof Error ? err.message : "Failed to fetch history");
@@ -173,5 +190,5 @@ export function useFetchHistory() {
     setRefreshTrigger((prev) => prev + 1);
   };
 
-  return { incidents, reporterNames, loading, error, refetch };
+  return { incidents, reporterNames, alertCreatorNames, loading, error, refetch };
 }

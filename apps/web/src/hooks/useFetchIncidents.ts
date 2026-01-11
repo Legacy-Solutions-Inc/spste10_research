@@ -1,15 +1,17 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabaseBrowser";
 import type { Incident, AlertRow, ReportRow, ResponderAssignment } from "@/types/incident";
 import { alertToIncident, reportToIncident } from "@/types/incident";
 
-export function useFetchIncidents() {
+export function useFetchIncidents(onNewIncident?: (newIncidents: Incident[]) => void) {
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const previousIncidentIdsRef = useRef<Set<string>>(new Set());
+  const isInitialLoadRef = useRef(true);
 
   useEffect(() => {
     const fetchIncidents = async () => {
@@ -99,6 +101,22 @@ export function useFetchIncidents() {
           (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
         );
 
+        // Detect new incidents (only after initial load)
+        if (!isInitialLoadRef.current && onNewIncident) {
+          const currentIds = new Set(allIncidents.map(inc => inc.id));
+          const newIncidents = allIncidents.filter(inc => !previousIncidentIdsRef.current.has(inc.id));
+          
+          if (newIncidents.length > 0) {
+            onNewIncident(newIncidents);
+          }
+          
+          previousIncidentIdsRef.current = currentIds;
+        } else if (isInitialLoadRef.current) {
+          // Store initial incident IDs
+          previousIncidentIdsRef.current = new Set(allIncidents.map(inc => inc.id));
+          isInitialLoadRef.current = false;
+        }
+
         setIncidents(allIncidents);
       } catch (err) {
         console.error("Error fetching incidents:", err);
@@ -112,12 +130,26 @@ export function useFetchIncidents() {
 
     // Set up realtime subscription for new incidents
     const supabase = createClient();
+    
+    // Subscribe to INSERT events for new alerts
     const alertsChannel = supabase
       .channel("alerts-changes")
       .on(
         "postgres_changes",
         {
-          event: "*",
+          event: "INSERT",
+          schema: "public",
+          table: "alerts",
+          filter: "status=eq.pending",
+        },
+        () => {
+          fetchIncidents();
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
           schema: "public",
           table: "alerts",
           filter: "status=eq.pending",
@@ -128,12 +160,25 @@ export function useFetchIncidents() {
       )
       .subscribe();
 
+    // Subscribe to INSERT events for new reports
     const reportsChannel = supabase
       .channel("reports-changes")
       .on(
         "postgres_changes",
         {
-          event: "*",
+          event: "INSERT",
+          schema: "public",
+          table: "reports",
+          filter: "status=eq.pending",
+        },
+        () => {
+          fetchIncidents();
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
           schema: "public",
           table: "reports",
           filter: "status=eq.pending",
@@ -148,7 +193,7 @@ export function useFetchIncidents() {
       supabase.removeChannel(alertsChannel);
       supabase.removeChannel(reportsChannel);
     };
-  }, [refreshTrigger]);
+  }, [refreshTrigger, onNewIncident]);
 
   const refetch = () => {
     setRefreshTrigger((prev) => prev + 1);
