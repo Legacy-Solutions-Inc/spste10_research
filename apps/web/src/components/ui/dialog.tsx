@@ -173,7 +173,9 @@ const DialogFooter = React.forwardRef<HTMLDivElement, DialogFooterProps>(
 );
 DialogFooter.displayName = "DialogFooter";
 
-interface DialogCloseProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {}
+interface DialogCloseProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  children?: React.ReactNode;
+}
 
 const DialogClose = React.forwardRef<HTMLButtonElement, DialogCloseProps>(
   ({ className, children, ...props }, ref) => {
@@ -181,6 +183,8 @@ const DialogClose = React.forwardRef<HTMLButtonElement, DialogCloseProps>(
     if (!context) {
       throw new Error("DialogClose must be used within Dialog");
     }
+
+    const IconComponent = X as any;
 
     return (
       <button
@@ -193,7 +197,7 @@ const DialogClose = React.forwardRef<HTMLButtonElement, DialogCloseProps>(
         )}
         {...props}
       >
-        {children ? children : <X className="h-4 w-4" />}
+        {children ?? <IconComponent className="h-4 w-4" />}
       </button>
     );
   }
