@@ -21,7 +21,7 @@ export default async function LoginPage() {
                 Emergency Alert and Response Management Platform
               </p>
               <p className="text-base md:text-lg text-slate-600 leading-relaxed">
-                Connecting responders with real-time emergency reports from citizens. Your mission is to help those in need, and we're here to support you every step of the way.
+                Connecting responders with real-time emergency reports from citizens. Your mission is to help those in need, and we&apos;re here to support you every step of the way.
               </p>
             </div>
           </div>
