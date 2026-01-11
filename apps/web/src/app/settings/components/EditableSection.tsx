@@ -1,6 +1,14 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import { Pencil, Save, X, User, MapPin, Mail, Phone, Loader2 } from "lucide-react";
+import { useToast } from "@/components/ui/use-toast";
+import type { LucideIcon } from "lucide-react";
 
 interface EditableField {
   label: string;
@@ -11,10 +19,12 @@ interface EditableField {
   disabled?: boolean;
   validation?: (value: string) => string | null;
   helperText?: string;
+  icon?: LucideIcon;
 }
 
 interface EditableSectionProps {
   title: string;
+  icon?: LucideIcon;
   fields: EditableField[];
   onSave: (updates: Record<string, string | null>) => Promise<void>;
   isLoading?: boolean;
@@ -22,6 +32,7 @@ interface EditableSectionProps {
 
 export default function EditableSection({
   title,
+  icon: Icon,
   fields,
   onSave,
   isLoading = false,
@@ -30,7 +41,16 @@ export default function EditableSection({
   const [values, setValues] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
-  const [saveMessage, setSaveMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const { toast } = useToast();
+
+  // Field icon mapping
+  const getFieldIcon = (fieldKey: string): LucideIcon | undefined => {
+    if (fieldKey.includes("name") || fieldKey === "full_name") return User;
+    if (fieldKey.includes("location") || fieldKey.includes("address") || fieldKey.includes("municipality") || fieldKey.includes("province")) return MapPin;
+    if (fieldKey === "email") return Mail;
+    if (fieldKey.includes("contact") || fieldKey.includes("phone")) return Phone;
+    return undefined;
+  };
 
   const handleEdit = () => {
     const initialValues: Record<string, string> = {};
@@ -39,14 +59,12 @@ export default function EditableSection({
     });
     setValues(initialValues);
     setErrors({});
-    setSaveMessage(null);
     setIsEditing(true);
   };
 
   const handleCancel = () => {
     setValues({});
     setErrors({});
-    setSaveMessage(null);
     setIsEditing(false);
   };
 
@@ -60,7 +78,6 @@ export default function EditableSection({
         return next;
       });
     }
-    setSaveMessage(null);
   };
 
   const validateFields = (): boolean => {
@@ -84,12 +101,14 @@ export default function EditableSection({
 
   const handleSave = async () => {
     if (!validateFields()) {
-      setSaveMessage({ type: "error", text: "Please fix the errors before saving." });
+      toast({
+        description: "Please fix the errors before saving.",
+        variant: "error",
+      });
       return;
     }
 
     setSaving(true);
-    setSaveMessage(null);
 
     try {
       const updates: Record<string, string | null> = {};
@@ -101,120 +120,154 @@ export default function EditableSection({
       });
 
       await onSave(updates);
-      setSaveMessage({ type: "success", text: "Settings saved successfully!" });
+      toast({
+        description: "Settings saved successfully!",
+        variant: "success",
+      });
       setTimeout(() => {
         setIsEditing(false);
-        setSaveMessage(null);
-      }, 1500);
+      }, 500);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Failed to save settings";
-      setSaveMessage({ type: "error", text: errorMessage });
+      toast({
+        description: errorMessage,
+        variant: "error",
+      });
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-blue-900">{title}</h2>
-        {!isEditing && (
-          <button
-            onClick={handleEdit}
-            disabled={isLoading}
-            className="px-4 py-2 text-sm font-medium text-blue-900 bg-blue-50 hover:bg-blue-100 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Edit
-          </button>
-        )}
-      </div>
-
-      <div className="space-y-4">
-        {fields.map((field) => (
-          <div key={field.fieldKey}>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              {field.label}
-            </label>
-            {isEditing ? (
-              <>
-                <input
-                  type={field.type || "text"}
-                  value={values[field.fieldKey] || ""}
-                  onChange={(e) => handleChange(field.fieldKey, e.target.value)}
-                  placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}`}
-                  disabled={field.disabled || saving}
-                  className={`w-full py-2 px-4 border rounded-md text-sm focus:outline-none focus:ring-2 transition-colors ${
-                    errors[field.fieldKey]
-                      ? "border-red-300 focus:ring-red-500 bg-red-50"
-                      : "border-gray-300 focus:ring-blue-500"
-                  } ${field.disabled ? "bg-gray-100 cursor-not-allowed" : ""}`}
-                />
-                {errors[field.fieldKey] && (
-                  <p className="text-xs text-red-600 mt-1">{errors[field.fieldKey]}</p>
-                )}
-                {field.helperText && !errors[field.fieldKey] && (
-                  <p className="text-xs text-gray-500 mt-1">{field.helperText}</p>
-                )}
-              </>
-            ) : (
-              <div>
-                <p className={`text-sm py-2 px-4 rounded-md ${
-                  field.disabled 
-                    ? "text-gray-600 bg-gray-100" 
-                    : "text-gray-900 bg-gray-50"
-                }`}>
-                  {field.value || <span className="text-gray-400 italic">Not set</span>}
-                </p>
-                {field.helperText && (
-                  <p className="text-xs text-gray-500 mt-1">{field.helperText}</p>
-                )}
-              </div>
+    <>
+      <CardHeader className="pb-3 px-4 md:px-6 pt-4 md:pt-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 md:gap-3">
+            {Icon && (
+              <Icon className="w-4 h-4 md:w-5 md:h-5 text-slate-600 dark:text-slate-400" />
             )}
+            <CardTitle className="text-base md:text-lg font-semibold text-slate-900 dark:text-slate-100">
+              {title}
+            </CardTitle>
           </div>
-        ))}
-      </div>
-
-      {isEditing && (
-        <div className="mt-6 pt-4 border-t border-gray-200 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-900 hover:bg-blue-800 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          {!isEditing && (
+            <Button
+              onClick={handleEdit}
+              disabled={isLoading}
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 md:h-9 md:w-9"
             >
-              {saving ? (
-                <>
-                  <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  <span>Saving...</span>
-                </>
-              ) : (
-                "Save"
-              )}
-            </button>
-            <button
-              onClick={handleCancel}
-              disabled={saving}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Cancel
-            </button>
-          </div>
-          {saveMessage && (
-            <div
-              className={`px-4 py-2 rounded-md text-sm ${
-                saveMessage.type === "success"
-                  ? "bg-green-50 text-green-700 border border-green-200"
-                  : "bg-red-50 text-red-700 border border-red-200"
-              }`}
-            >
-              {saveMessage.text}
-            </div>
+              <Pencil className="h-3.5 w-3.5 md:h-4 md:w-4" />
+            </Button>
           )}
         </div>
+      </CardHeader>
+
+      <CardContent className="space-y-4 px-4 md:px-6 pb-4 md:pb-6">
+        {fields.map((field, index) => {
+          const FieldIcon = field.icon || getFieldIcon(field.fieldKey);
+          
+          return (
+            <div key={field.fieldKey}>
+              {index > 0 && <Separator className="my-3" />}
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor={field.fieldKey}
+                  className="text-xs md:text-sm font-medium text-slate-700 dark:text-slate-300 flex items-center gap-1.5 md:gap-2"
+                >
+                  {FieldIcon && (
+                    <FieldIcon className="w-3.5 h-3.5 md:w-4 md:h-4 text-slate-500 dark:text-slate-400" />
+                  )}
+                  {field.label}
+                </Label>
+                {isEditing ? (
+                  <div className="space-y-1">
+                    <Input
+                      id={field.fieldKey}
+                      type={field.type || "text"}
+                      value={values[field.fieldKey] || ""}
+                      onChange={(e) => handleChange(field.fieldKey, e.target.value)}
+                      placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}`}
+                      disabled={field.disabled || saving}
+                      className={`text-sm ${
+                        errors[field.fieldKey]
+                          ? "border-red-300 focus:ring-red-500 bg-red-50 dark:bg-red-900/20"
+                          : ""
+                      }`}
+                    />
+                    {errors[field.fieldKey] && (
+                      <p className="text-xs text-red-600 dark:text-red-400">
+                        {errors[field.fieldKey]}
+                      </p>
+                    )}
+                    {field.helperText && !errors[field.fieldKey] && (
+                      <p className="text-xs text-muted-foreground">
+                        {field.helperText}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    <div
+                      className={`text-xs md:text-sm py-1.5 md:py-2 px-2 md:px-3 rounded-md ${
+                        field.disabled
+                          ? "text-muted-foreground bg-slate-100 dark:bg-slate-700"
+                          : "text-slate-900 dark:text-slate-100 bg-slate-50 dark:bg-slate-700/50"
+                      }`}
+                    >
+                      {field.value || (
+                        <span className="text-muted-foreground italic">Not set</span>
+                      )}
+                    </div>
+                    {field.helperText && (
+                      <p className="text-xs text-muted-foreground">{field.helperText}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </CardContent>
+
+      {isEditing && (
+        <>
+          <Separator />
+          <CardContent className="pt-4 px-4 md:px-6 pb-4 md:pb-6">
+            <div className="flex items-center justify-end gap-2 md:gap-3">
+              <Button
+                onClick={handleCancel}
+                disabled={saving}
+                variant="secondary"
+                size="sm"
+                className="text-xs md:text-sm"
+              >
+                <X className="h-3.5 w-3.5 md:h-4 md:w-4 mr-1.5 md:mr-2" />
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSave}
+                disabled={saving}
+                size="sm"
+                className="min-w-[80px] md:min-w-[100px] text-xs md:text-sm"
+              >
+                {saving ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 md:h-4 md:w-4 mr-1.5 md:mr-2 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-3.5 w-3.5 md:h-4 md:w-4 mr-1.5 md:mr-2" />
+                    Save
+                  </>
+                )}
+              </Button>
+            </div>
+          </CardContent>
+        </>
       )}
-    </div>
+    </>
   );
 }
