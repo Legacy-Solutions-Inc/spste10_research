@@ -1,39 +1,70 @@
 "use client";
 
 import { useState } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Pencil, Lock, Save, X, Loader2 } from "lucide-react";
+import { useToast } from "@/components/ui/use-toast";
+import type { LucideIcon } from "lucide-react";
 
 interface ChangePasswordSectionProps {
+  icon?: LucideIcon;
   onSave: (password: string) => Promise<void>;
 }
 
-export default function ChangePasswordSection({ onSave }: ChangePasswordSectionProps) {
-  const [isEditing, setIsEditing] = useState(false);
+export default function ChangePasswordSection({ icon: Icon, onSave }: ChangePasswordSectionProps) {
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [oldPassword, setOldPassword] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [errors, setErrors] = useState<{ password?: string; confirmPassword?: string }>({});
+  const [errors, setErrors] = useState<{ oldPassword?: string; password?: string; confirmPassword?: string }>({});
   const [saving, setSaving] = useState(false);
-  const [saveMessage, setSaveMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const { toast } = useToast();
 
   const validatePassword = (pwd: string): string | null => {
-    if (!pwd || pwd.trim() === "") return null;
+    if (!pwd || pwd.trim() === "") return "Password is required";
     if (pwd.length < 6) return "Password must be at least 6 characters";
     return null;
   };
 
-  const handleEdit = () => {
+  const handleOpenDialog = () => {
+    setOldPassword("");
     setPassword("");
     setConfirmPassword("");
     setErrors({});
-    setSaveMessage(null);
-    setIsEditing(true);
+    setIsDialogOpen(true);
   };
 
-  const handleCancel = () => {
-    setPassword("");
-    setConfirmPassword("");
-    setErrors({});
-    setSaveMessage(null);
-    setIsEditing(false);
+  const handleCloseDialog = () => {
+    if (!saving) {
+      setOldPassword("");
+      setPassword("");
+      setConfirmPassword("");
+      setErrors({});
+      setIsDialogOpen(false);
+    }
+  };
+
+  const handleOldPasswordChange = (value: string) => {
+    setOldPassword(value);
+    if (errors.oldPassword) {
+      setErrors((prev) => {
+        const next = { ...prev };
+        delete next.oldPassword;
+        return next;
+      });
+    }
   };
 
   const handlePasswordChange = (value: string) => {
@@ -48,14 +79,13 @@ export default function ChangePasswordSection({ onSave }: ChangePasswordSectionP
     // Re-validate confirm password if both are filled
     if (confirmPassword && value !== confirmPassword) {
       setErrors((prev) => ({ ...prev, confirmPassword: "Passwords do not match" }));
-    } else if (errors.confirmPassword) {
+    } else if (errors.confirmPassword && value === confirmPassword) {
       setErrors((prev) => {
         const next = { ...prev };
         delete next.confirmPassword;
         return next;
       });
     }
-    setSaveMessage(null);
   };
 
   const handleConfirmPasswordChange = (value: string) => {
@@ -70,11 +100,10 @@ export default function ChangePasswordSection({ onSave }: ChangePasswordSectionP
     if (password && value !== password) {
       setErrors((prev) => ({ ...prev, confirmPassword: "Passwords do not match" }));
     }
-    setSaveMessage(null);
   };
 
   const validate = (): boolean => {
-    const newErrors: { password?: string; confirmPassword?: string } = {};
+    const newErrors: { oldPassword?: string; password?: string; confirmPassword?: string } = {};
     let isValid = true;
 
     const passwordError = validatePassword(password);
@@ -99,133 +128,184 @@ export default function ChangePasswordSection({ onSave }: ChangePasswordSectionP
 
   const handleSave = async () => {
     if (!validate()) {
-      setSaveMessage({ type: "error", text: "Please fix the errors before saving." });
+      toast({
+        description: "Please fix the errors before saving.",
+        variant: "error",
+      });
       return;
     }
 
     setSaving(true);
-    setSaveMessage(null);
 
     try {
       await onSave(password);
-      setSaveMessage({ type: "success", text: "Password changed successfully!" });
+      toast({
+        description: "Password changed successfully!",
+        variant: "success",
+      });
       setTimeout(() => {
-        setIsEditing(false);
+        setIsDialogOpen(false);
+        setOldPassword("");
         setPassword("");
         setConfirmPassword("");
-        setSaveMessage(null);
-      }, 1500);
+      }, 500);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Failed to change password";
-      setSaveMessage({ type: "error", text: errorMessage });
+      toast({
+        description: errorMessage,
+        variant: "error",
+      });
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-blue-900">Change Password</h2>
-        {!isEditing && (
-          <button
-            onClick={handleEdit}
+    <>
+      <CardHeader className="pb-3 px-4 md:px-6 pt-4 md:pt-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 md:gap-3">
+            {Icon && (
+              <Icon className="w-4 h-4 md:w-5 md:h-5 text-slate-600 dark:text-slate-400" />
+            )}
+            <CardTitle className="text-base md:text-lg font-semibold text-slate-900 dark:text-slate-100">
+              Change Password
+            </CardTitle>
+          </div>
+          <Button
+            onClick={handleOpenDialog}
             disabled={saving}
-            className="px-4 py-2 text-sm font-medium text-blue-900 bg-blue-50 hover:bg-blue-100 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 md:h-9 md:w-9"
           >
-            Edit
-          </button>
-        )}
-      </div>
-
-      {!isEditing ? (
-        <p className="text-sm text-gray-500">Click Edit to change your password</p>
-      ) : (
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              New Password
-            </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => handlePasswordChange(e.target.value)}
-              placeholder="Enter new password (minimum 6 characters)"
-              disabled={saving}
-              className={`w-full py-2 px-4 border rounded-md text-sm focus:outline-none focus:ring-2 transition-colors ${
-                errors.password
-                  ? "border-red-300 focus:ring-red-500 bg-red-50"
-                  : "border-gray-300 focus:ring-blue-500"
-              }`}
-            />
-            {errors.password && (
-              <p className="text-xs text-red-600 mt-1">{errors.password}</p>
-            )}
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Confirm New Password
-            </label>
-            <input
-              type="password"
-              value={confirmPassword}
-              onChange={(e) => handleConfirmPasswordChange(e.target.value)}
-              placeholder="Confirm new password"
-              disabled={saving}
-              className={`w-full py-2 px-4 border rounded-md text-sm focus:outline-none focus:ring-2 transition-colors ${
-                errors.confirmPassword
-                  ? "border-red-300 focus:ring-red-500 bg-red-50"
-                  : "border-gray-300 focus:ring-blue-500"
-              }`}
-            />
-            {errors.confirmPassword && (
-              <p className="text-xs text-red-600 mt-1">{errors.confirmPassword}</p>
-            )}
-          </div>
+            <Pencil className="h-3.5 w-3.5 md:h-4 md:w-4" />
+          </Button>
         </div>
-      )}
+      </CardHeader>
 
-      {isEditing && (
-        <div className="mt-6 pt-4 border-t border-gray-200 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={handleSave}
+      <CardContent className="px-4 md:px-6 pb-4 md:pb-6">
+        <p className="text-xs md:text-sm text-muted-foreground">
+          Click Edit to change your password
+        </p>
+      </CardContent>
+
+      <Dialog open={isDialogOpen} onOpenChange={handleCloseDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-3">
+              <Lock className="w-5 h-5 text-slate-600 dark:text-slate-400" />
+              <DialogTitle>Change Password</DialogTitle>
+            </div>
+            <DialogDescription>
+              Enter your new password below. Make sure it&apos;s at least 6 characters long.
+            </DialogDescription>
+          </DialogHeader>
+
+          <ScrollArea className="max-h-[60vh] pr-4">
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="oldPassword" className="flex items-center gap-2">
+                  <Lock className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+                  Old Password (Optional)
+                </Label>
+                <Input
+                  id="oldPassword"
+                  type="password"
+                  value={oldPassword}
+                  onChange={(e) => handleOldPasswordChange(e.target.value)}
+                  placeholder="Enter your current password"
+                  disabled={saving}
+                  className={
+                    errors.oldPassword
+                      ? "border-red-300 focus:ring-red-500 bg-red-50 dark:bg-red-900/20"
+                      : ""
+                  }
+                />
+                {errors.oldPassword && (
+                  <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                    {errors.oldPassword}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="newPassword" className="flex items-center gap-2">
+                  <Lock className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+                  New Password
+                </Label>
+                <Input
+                  id="newPassword"
+                  type="password"
+                  value={password}
+                  onChange={(e) => handlePasswordChange(e.target.value)}
+                  placeholder="Enter new password (minimum 6 characters)"
+                  disabled={saving}
+                  className={
+                    errors.password
+                      ? "border-red-300 focus:ring-red-500 bg-red-50 dark:bg-red-900/20"
+                      : ""
+                  }
+                />
+                {errors.password && (
+                  <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                    {errors.password}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="confirmPassword" className="flex items-center gap-2">
+                  <Lock className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+                  Confirm New Password
+                </Label>
+                <Input
+                  id="confirmPassword"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => handleConfirmPasswordChange(e.target.value)}
+                  placeholder="Confirm new password"
+                  disabled={saving}
+                  className={
+                    errors.confirmPassword
+                      ? "border-red-300 focus:ring-red-500 bg-red-50 dark:bg-red-900/20"
+                      : ""
+                  }
+                />
+                {errors.confirmPassword && (
+                  <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                    {errors.confirmPassword}
+                  </p>
+                )}
+              </div>
+            </div>
+          </ScrollArea>
+
+          <DialogFooter>
+            <Button
+              onClick={handleCloseDialog}
               disabled={saving}
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-900 hover:bg-blue-800 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              variant="secondary"
             >
+              <X className="h-4 w-4 mr-2" />
+              Cancel
+            </Button>
+            <Button onClick={handleSave} disabled={saving} className="min-w-[100px]">
               {saving ? (
                 <>
-                  <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  <span>Saving...</span>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Saving...
                 </>
               ) : (
-                "Save"
+                <>
+                  <Save className="h-4 w-4 mr-2" />
+                  Save
+                </>
               )}
-            </button>
-            <button
-              onClick={handleCancel}
-              disabled={saving}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Cancel
-            </button>
-          </div>
-          {saveMessage && (
-            <div
-              className={`px-4 py-2 rounded-md text-sm ${
-                saveMessage.type === "success"
-                  ? "bg-green-50 text-green-700 border border-green-200"
-                  : "bg-red-50 text-red-700 border border-red-200"
-              }`}
-            >
-              {saveMessage.text}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
