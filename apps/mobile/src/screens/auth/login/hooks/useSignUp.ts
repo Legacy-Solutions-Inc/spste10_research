@@ -58,9 +58,25 @@ export function useSignUp() {
           }
         }
 
-        // Navigate to email confirmation screen
-        navigation.navigate("Login5", { email: data.user.email || undefined });
-        return true;
+        // Check if session exists (with email confirmation disabled, Supabase should automatically create a session)
+        if (data.session) {
+          // User is automatically logged in (email confirmation disabled)
+          navigation.replace("Home");
+          return true;
+        } else {
+          // Edge case: no session created (shouldn't happen with email confirmation disabled)
+          Alert.alert(
+            "Account Created",
+            "Your account has been created successfully. Please log in.",
+            [
+              {
+                text: "OK",
+                onPress: () => navigation.navigate("Login2"),
+              },
+            ]
+          );
+          return true;
+        }
       }
       return false;
     } catch (error) {

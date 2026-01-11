@@ -21,12 +21,12 @@ export function HomeScreen() {
   const getDisplayName = (): string => {
     if (!profileData) return "User";
 
-    // Priority 1: first_name (from user_profiles) - show just first name if present
+    // Priority 1: username (full_name from profiles table - set during registration)
     if (profileData.first_name) {
       return profileData.first_name;
     }
-
-    // Priority 2: full_name (from profiles table)
+    
+    // Priority 2: first_name (from user_profiles - set in settings)
     if (profileData.full_name) {
       return profileData.full_name;
     }
