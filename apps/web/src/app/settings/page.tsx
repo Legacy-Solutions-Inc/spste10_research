@@ -10,11 +10,11 @@ export default async function SettingsPage() {
   // Authentication check is handled by middleware
   const supabase = createClient();
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  // Session is guaranteed by middleware, but TypeScript needs the check
-  if (!session?.user) {
+  // User is guaranteed by middleware, but TypeScript needs the check
+  if (!user) {
     return null;
   }
 
@@ -38,7 +38,7 @@ export default async function SettingsPage() {
     const { data } = await supabase
       .from("profiles")
       .select("*")
-      .eq("id", session.user.id)
+      .eq("id", user.id)
       .single();
     profile = data as ProfileData;
   } catch (error) {
@@ -53,7 +53,7 @@ export default async function SettingsPage() {
     const { data } = await supabase
       .from("responder_profiles")
       .select("*")
-      .eq("id", session.user.id)
+      .eq("id", user.id)
       .single();
     responderProfile = data as ResponderProfileData;
   } catch (error) {
@@ -65,7 +65,7 @@ export default async function SettingsPage() {
   const mergedData = {
     id: profile?.id,
     full_name: profile?.full_name,
-    email: profile?.email || session.user.email,
+    email: profile?.email || user.email,
     municipality: responderProfile?.municipality,
     province: responderProfile?.province,
     office_address: responderProfile?.office_address,
@@ -75,7 +75,7 @@ export default async function SettingsPage() {
   return (
     <SettingsClient
       initialData={mergedData}
-      userEmail={session.user.email || ""}
+      userEmail={user.email || ""}
     />
   );
 }
