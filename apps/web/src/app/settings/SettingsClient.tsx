@@ -21,14 +21,16 @@ interface SettingsClientProps {
 
 export default function SettingsClient({ initialData, userEmail }: SettingsClientProps) {
   return (
-    <div className="flex min-h-screen overflow-hidden">
+    <div className="flex min-h-screen overflow-hidden bg-muted dark:bg-slate-900">
       {/* Sidebar */}
       <Sidebar />
 
       {/* Main Content */}
-      <div className="flex-1 overflow-y-auto bg-gray-50">
-        <div className="max-w-4xl mx-auto py-8 px-6">
-          <h1 className="text-2xl font-bold text-blue-900 mb-6">Settings</h1>
+      <div className="flex-1 overflow-y-auto relative min-w-0 overflow-x-hidden">
+        <div className="w-full py-6 px-4 md:px-6 lg:px-8">
+          <h1 className="text-xl md:text-2xl font-bold text-slate-800 dark:text-slate-100 mb-4">
+            Settings
+          </h1>
           <SettingsForm initialData={initialData} userEmail={userEmail} />
         </div>
       </div>

@@ -122,12 +122,12 @@ export default function DashboardClient() {
   // Show loading state
   if (loading) {
     return (
-      <div className="flex min-h-screen overflow-hidden">
+      <div className="flex min-h-screen overflow-hidden bg-slate-100 dark:bg-slate-900">
         <Sidebar />
-        <div className="flex-1 flex items-center justify-center bg-gray-50">
+        <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-900 mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading incidents...</p>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-slate-600 dark:text-slate-400">Loading incidents...</p>
           </div>
         </div>
       </div>
@@ -137,14 +137,14 @@ export default function DashboardClient() {
   // Show error state
   if (error) {
     return (
-      <div className="flex min-h-screen overflow-hidden">
+      <div className="flex min-h-screen overflow-hidden bg-slate-100 dark:bg-slate-900">
         <Sidebar />
-        <div className="flex-1 flex items-center justify-center bg-gray-50">
-          <div className="text-center">
-            <p className="text-red-600 mb-4">Error: {error}</p>
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center bg-white dark:bg-slate-800 p-8 rounded-xl shadow-lg">
+            <p className="text-red-600 dark:text-red-400 mb-4 font-medium">Error: {error}</p>
             <button
               onClick={() => refetch()}
-              className="px-4 py-2 bg-blue-900 text-white rounded-md hover:bg-blue-800"
+              className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-md transition-colors duration-200 font-medium"
             >
               Retry
             </button>
@@ -155,17 +155,17 @@ export default function DashboardClient() {
   }
 
   return (
-    <div className="flex min-h-screen overflow-hidden">
+    <div className="flex min-h-screen overflow-hidden bg-slate-100 dark:bg-slate-900">
       {/* Sidebar */}
       <Sidebar />
 
       {/* Main Content */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Left Panel - Alerts List */}
-        <div className="w-80 border-r border-gray-200 bg-white overflow-hidden flex flex-col">
+      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden gap-0">
+        {/* Incident Panel */}
+        <div className="w-full lg:w-96 border-r border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden flex flex-col">
           {actionError && (
-            <div className="bg-red-50 border-b border-red-200 p-3">
-              <p className="text-sm text-red-700">{actionError}</p>
+            <div className="bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-800 p-3">
+              <p className="text-sm text-red-700 dark:text-red-400">{actionError}</p>
             </div>
           )}
           <AlertsList
@@ -175,8 +175,8 @@ export default function DashboardClient() {
           />
         </div>
 
-        {/* Right Panel - Map */}
-        <div className="flex-1 relative">
+        {/* Map Panel */}
+        <div className="flex-1 relative bg-white dark:bg-slate-800">
           <MapComponent
             alerts={alerts}
             selectedAlert={selectedAlert}
@@ -186,8 +186,9 @@ export default function DashboardClient() {
             onDismiss={handleDismiss}
           />
           {(creatingAssignment || updatingAssignment) && (
-            <div className="absolute top-4 right-4 bg-blue-900 text-white px-4 py-2 rounded-md shadow-lg">
-              Processing...
+            <div className="absolute top-4 right-4 bg-blue-600 dark:bg-blue-700 text-white px-4 py-2 rounded-xl shadow-lg z-[1000] flex items-center gap-2">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+              <span className="text-sm font-medium">Processing...</span>
             </div>
           )}
         </div>

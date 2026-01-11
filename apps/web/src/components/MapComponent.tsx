@@ -6,6 +6,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { Alert } from "@/types/alert";
 import { isStoragePath, extractFilePath, getSignedUrl } from "@/lib/storageUtils";
+import { AlertCircle, FileText, MapPin, Clock, User, CheckCircle2, XCircle } from "lucide-react";
 
 // Fix for default marker icons in Next.js
 const iconRetinaUrl = "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png";
@@ -23,45 +24,61 @@ const DefaultIcon = L.icon({
   shadowSize: [41, 41],
 });
 
-// Helper function to create icon with fallback
-const createIconWithFallback = (iconPath: string, fallback: L.Icon): L.Icon => {
-  return new L.Icon({
-    iconUrl: iconPath,
-    iconSize: [30, 30],
-    iconAnchor: [15, 30],
-    popupAnchor: [0, -30],
-    shadowUrl: shadowUrl,
-    shadowSize: [41, 41],
-    shadowAnchor: [12, 41],
-    // If icon fails to load, Leaflet will show broken image
-    // We'll handle this by checking if icon exists and using fallback
+// Helper function to create custom Leaflet divIcon with SVG icon
+const createLucideIconMarker = (
+  iconSvgPath: string,
+  color: string,
+  size: number = 36
+): L.DivIcon => {
+  return L.divIcon({
+    className: "custom-lucide-marker",
+    html: `
+      <div style="
+        width: ${size}px;
+        height: ${size}px;
+        background-color: ${color};
+        border: 3px solid white;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      ">
+        <svg width="${size - 8}" height="${size - 8}" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          ${iconSvgPath}
+        </svg>
+      </div>
+    `,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+    popupAnchor: [0, -size / 2],
   });
 };
 
-// Custom icons for different alert types
-// Note: Place icon files at /public/icons/alert-icon.png and /public/icons/report-icon.png
-// If icons don't exist, markers will use DefaultIcon as fallback
-const alertIconPath = "/icons/alert-icon.png";
-const reportIconPath = "/icons/report-icon.png";
+// SVG paths for lucide-react icons
+// AlertCircle path
+const alertCirclePath = '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>';
+// FileText path
+const fileTextPath = '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>';
 
-// Create icons - will fallback to DefaultIcon if custom icons don't exist
-const alertIcon = createIconWithFallback(alertIconPath, DefaultIcon);
-const reportIcon = createIconWithFallback(reportIconPath, DefaultIcon);
+// Custom icons using lucide-react paths
+const alertMarkerIcon = createLucideIconMarker(alertCirclePath, "#ef4444", 36); // Red
+const reportMarkerIcon = createLucideIconMarker(fileTextPath, "#f97316", 36); // Orange
 
 // Custom icon for responder location (blue marker)
 const responderIcon = L.divIcon({
   className: "responder-marker",
   html: `<div style="
-    width: 30px;
-    height: 30px;
-    background-color: #1e40af;
+    width: 36px;
+    height: 36px;
+    background-color: #2563eb;
     border: 3px solid white;
     border-radius: 50%;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
   "></div>`,
-  iconSize: [30, 30],
-  iconAnchor: [15, 15],
-  popupAnchor: [0, -15],
+  iconSize: [36, 36],
+  iconAnchor: [18, 18],
+  popupAnchor: [0, -18],
 });
 
 L.Marker.prototype.options.icon = DefaultIcon;
@@ -111,26 +128,7 @@ export default function MapComponent({
   onDismiss,
 }: MapComponentProps) {
   const [expandedAlertId, setExpandedAlertId] = useState<string | null>(null);
-  const [iconsAvailable, setIconsAvailable] = useState({ alert: false, report: false });
   const [imageUrls, setImageUrls] = useState<Record<string, string>>({});
-
-  // Check if custom icons exist and are loadable
-  useEffect(() => {
-    const checkIconExists = async (path: string, type: "alert" | "report") => {
-      try {
-        const response = await fetch(path, { method: "HEAD" });
-        if (response.ok) {
-          setIconsAvailable((prev) => ({ ...prev, [type]: true }));
-        }
-      } catch {
-        // Icon doesn't exist or failed to load, use DefaultIcon
-        setIconsAvailable((prev) => ({ ...prev, [type]: false }));
-      }
-    };
-
-    checkIconExists(alertIconPath, "alert");
-    checkIconExists(reportIconPath, "report");
-  }, []);
 
   // Fetch signed URLs for report images
   useEffect(() => {
@@ -190,12 +188,9 @@ export default function MapComponent({
     }
   }, [alerts]);
 
-  // Get the appropriate icon with fallback to DefaultIcon
+  // Get the appropriate icon
   const getIcon = (isReport: boolean) => {
-    if (isReport) {
-      return iconsAvailable.report ? reportIcon : DefaultIcon;
-    }
-    return iconsAvailable.alert ? alertIcon : DefaultIcon;
+    return isReport ? reportMarkerIcon : alertMarkerIcon;
   };
 
   const handleViewDetails = (alertId: string) => {
@@ -234,9 +229,9 @@ export default function MapComponent({
         {responderLocation && (
           <Marker position={responderLocation} icon={responderIcon}>
             <Popup>
-              <div className="bg-blue-600 text-white p-2 rounded shadow">
+              <div className="bg-blue-600 text-white p-3 rounded-xl shadow-lg">
                 <p className="text-sm font-semibold">Your Location</p>
-                <p className="text-xs text-blue-100">Responder Office</p>
+                <p className="text-xs text-blue-100 mt-1">Responder Office</p>
               </div>
             </Popup>
           </Marker>
@@ -258,15 +253,37 @@ export default function MapComponent({
                   // Expanded view - different content for alerts vs reports
                   isReport ? (
                     // Emergency Report expanded view
-                    <div className="bg-blue-900 text-white p-4 rounded-lg shadow-lg max-w-[260px]">
-                      <p className="font-bold text-sm mb-2">Emergency Report</p>
-                      <p className="text-sm text-white mb-1">
-                        <span className="font-semibold">Location:</span> {alert.location}
-                      </p>
-                      {alert.name && (
-                        <p className="text-sm text-white mb-1">
-                          <span className="font-semibold">Reporter:</span> {alert.name}
+                    <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-xl max-w-[280px]">
+                      {/* Header with Badge */}
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400">
+                          <FileText className="w-3.5 h-3.5" />
+                          <span>Emergency Report</span>
+                        </div>
+                      </div>
+                      
+                      {/* Location */}
+                      <div className="flex items-start gap-2 mb-2">
+                        <MapPin className="w-4 h-4 text-slate-400 dark:text-slate-500 mt-0.5 flex-shrink-0" />
+                        <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">{alert.location}</p>
+                      </div>
+                      
+                      {/* Time */}
+                      <div className="flex items-center gap-2 mb-3">
+                        <Clock className="w-4 h-4 text-slate-400 dark:text-slate-500" />
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          {new Date(alert.timestamp).toLocaleString()}
                         </p>
+                      </div>
+                      
+                      {/* Reporter */}
+                      {alert.name && (
+                        <div className="flex items-start gap-2 mb-3">
+                          <User className="w-4 h-4 text-slate-400 dark:text-slate-500 mt-0.5 flex-shrink-0" />
+                          <p className="text-sm text-slate-700 dark:text-slate-300">
+                            <span className="font-medium">Reporter:</span> {alert.name}
+                          </p>
+                        </div>
                       )}
                       {/* Report image */}
                       {(() => {
@@ -278,125 +295,164 @@ export default function MapComponent({
                         
                         if (imageUrl) {
                           return (
-                            <div className="mb-3 mt-2 rounded overflow-hidden bg-gray-800">
+                            <div className="mb-3 rounded-lg overflow-hidden bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600">
                               {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img
                                 src={imageUrl}
                                 alt="Report"
-                                className="w-full h-auto max-h-32 object-cover"
+                                className="w-full h-auto max-h-40 object-cover"
                                 onError={(e) => {
                                   console.error(`[MapComponent] Image failed to load for ${alert.id}:`, imageUrl);
-                                  console.error(`[MapComponent] Original imageUrl:`, alert.imageUrl);
-                                  // If image fails to load, show placeholder
                                   const target = e.target as HTMLImageElement;
                                   target.style.display = 'none';
                                   const parent = target.parentElement;
                                   if (parent) {
-                                    parent.innerHTML = '<div class="mb-3 mt-2 bg-gray-700 rounded p-2 text-xs text-gray-300 text-center min-h-[80px] flex items-center justify-center">Image failed to load</div>';
+                                    parent.innerHTML = '<div class="mb-3 rounded-lg bg-slate-100 dark:bg-slate-700 p-4 text-xs text-slate-500 dark:text-slate-400 text-center min-h-[100px] flex items-center justify-center border border-slate-200 dark:border-slate-600">Image failed to load</div>';
                                   }
-                                }}
-                                onLoad={() => {
-                                  console.log(`[MapComponent] Image loaded successfully for ${alert.id}`);
                                 }}
                               />
                             </div>
                           );
                         } else if (alert.imageUrl) {
-                          // Has image URL but signed URL not ready yet or failed to generate
-                          // Show loading state, but also log for debugging
-                          console.log(`[MapComponent] Image URL exists but not loaded yet for ${alert.id}:`, alert.imageUrl);
                           return (
-                            <div className="mb-3 mt-2 bg-gray-700 rounded p-2 text-xs text-gray-300 text-center min-h-[80px] flex items-center justify-center">
+                            <div className="mb-3 rounded-lg bg-slate-100 dark:bg-slate-700 p-4 text-xs text-slate-500 dark:text-slate-400 text-center min-h-[100px] flex items-center justify-center border border-slate-200 dark:border-slate-600">
                               Loading image...
                             </div>
                           );
                         } else {
-                          // No image URL in database
                           return (
-                            <div className="mb-3 mt-2 bg-gray-700 rounded p-2 text-xs text-gray-300 text-center min-h-[80px] flex items-center justify-center">
+                            <div className="mb-3 rounded-lg bg-slate-100 dark:bg-slate-700 p-4 text-xs text-slate-500 dark:text-slate-400 text-center min-h-[100px] flex items-center justify-center border border-slate-200 dark:border-slate-600">
                               No image available
                             </div>
                           );
                         }
                       })()}
+                      
                       {/* Report description */}
-                      {alert.description ? (
-                        <p className="text-sm text-white mb-1">
-                          <span className="font-semibold">Description:</span> {alert.description}
-                        </p>
-                      ) : (
-                        <p className="text-sm text-white mb-1">
-                          <span className="font-semibold">Description:</span> No description provided
-                        </p>
+                      {alert.description && (
+                        <div className="mb-4">
+                          <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
+                            {alert.description}
+                          </p>
+                        </div>
                       )}
 
-                      <div className="flex justify-between mt-4 gap-2">
+                      {/* Actions */}
+                      <div className="flex gap-2 mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
                         <button
                           onClick={() => handleDismiss(alert.id)}
-                          className="bg-white text-blue-900 font-semibold py-1 px-4 rounded-full text-sm shadow hover:opacity-90 transition flex-1"
+                          className="flex-1 flex items-center justify-center gap-2 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/30 text-red-700 dark:text-red-400 font-semibold py-2 px-4 rounded-xl text-sm shadow-sm hover:shadow transition-all duration-200"
                         >
-                          DISMISS
+                          <XCircle className="w-4 h-4" />
+                          <span>Dismiss</span>
                         </button>
                         <button
                           onClick={() => handleApprove(alert.id)}
-                          className="bg-white text-blue-900 font-semibold py-1 px-4 rounded-full text-sm shadow hover:opacity-90 transition flex-1"
+                          className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-xl text-sm shadow-sm hover:shadow transition-all duration-200"
                         >
-                          APPROVE
+                          <CheckCircle2 className="w-4 h-4" />
+                          <span>Approve</span>
                         </button>
                       </div>
                     </div>
                   ) : (
                     // Emergency Alert expanded view
-                    <div className="bg-blue-900 text-white p-4 rounded-lg shadow-lg max-w-[260px]">
-                      <p className="font-bold text-sm mb-2">Emergency Alert</p>
+                    <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-xl max-w-[280px]">
+                      {/* Header with Badge */}
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
+                          <AlertCircle className="w-3.5 h-3.5" />
+                          <span>Emergency Alert</span>
+                        </div>
+                      </div>
+                      
+                      {/* Location */}
+                      <div className="flex items-start gap-2 mb-2">
+                        <MapPin className="w-4 h-4 text-slate-400 dark:text-slate-500 mt-0.5 flex-shrink-0" />
+                        <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">{alert.location}</p>
+                      </div>
+                      
+                      {/* Time */}
+                      <div className="flex items-center gap-2 mb-3">
+                        <Clock className="w-4 h-4 text-slate-400 dark:text-slate-500" />
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          {new Date(alert.timestamp).toLocaleString()}
+                        </p>
+                      </div>
+                      
+                      {/* Victim Details */}
                       {alert.name && (
-                        <p className="text-sm text-white mb-1">
-                          <span className="font-semibold">Name:</span> {alert.name}
-                        </p>
-                      )}
-                      <p className="text-sm text-white mb-1">
-                        <span className="font-semibold">Location:</span> {alert.location}
-                      </p>
-                      {alert.age !== undefined && (
-                        <p className="text-sm text-white mb-1">
-                          <span className="font-semibold">Age:</span> {alert.age}
-                        </p>
-                      )}
-                      {alert.bloodType && (
-                        <p className="text-sm text-white mb-1">
-                          <span className="font-semibold">Blood Type:</span> {alert.bloodType}
-                        </p>
-                      )}
-                      {alert.sex && (
-                        <p className="text-sm text-white mb-1">
-                          <span className="font-semibold">Sex:</span> {alert.sex}
-                        </p>
+                        <div className="mb-3 p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
+                          <div className="flex items-start gap-2 mb-2">
+                            <User className="w-4 h-4 text-slate-400 dark:text-slate-500 mt-0.5 flex-shrink-0" />
+                            <div className="flex-1">
+                              <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{alert.name}</p>
+                              {(alert.age || alert.bloodType || alert.sex) && (
+                                <div className="mt-1.5 space-y-1">
+                                  {alert.age !== undefined && (
+                                    <p className="text-xs text-slate-600 dark:text-slate-400">
+                                      <span className="font-medium">Age:</span> {alert.age} years old
+                                    </p>
+                                  )}
+                                  {alert.bloodType && (
+                                    <p className="text-xs text-slate-600 dark:text-slate-400">
+                                      <span className="font-medium">Blood Type:</span> {alert.bloodType}
+                                    </p>
+                                  )}
+                                  {alert.sex && (
+                                    <p className="text-xs text-slate-600 dark:text-slate-400">
+                                      <span className="font-medium">Sex:</span> {alert.sex}
+                                    </p>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
                       )}
 
-                      <div className="flex justify-between mt-4 gap-2">
+                      {/* Actions */}
+                      <div className="flex gap-2 mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
                         <button
                           onClick={() => handleDismiss(alert.id)}
-                          className="bg-white text-blue-900 font-semibold py-1 px-4 rounded-full text-sm shadow hover:opacity-90 transition flex-1"
+                          className="flex-1 flex items-center justify-center gap-2 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/30 text-red-700 dark:text-red-400 font-semibold py-2 px-4 rounded-xl text-sm shadow-sm hover:shadow transition-all duration-200"
                         >
-                          DISMISS
+                          <XCircle className="w-4 h-4" />
+                          <span>Dismiss</span>
                         </button>
                         <button
                           onClick={() => handleApprove(alert.id)}
-                          className="bg-white text-blue-900 font-semibold py-1 px-4 rounded-full text-sm shadow hover:opacity-90 transition flex-1"
+                          className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-xl text-sm shadow-sm hover:shadow transition-all duration-200"
                         >
-                          APPROVE
+                          <CheckCircle2 className="w-4 h-4" />
+                          <span>Approve</span>
                         </button>
                       </div>
                     </div>
                   )
                 ) : (
                   // Compact view
-                  <div className="bg-blue-900 text-white p-3 rounded-lg shadow-lg">
-                    <p className="text-sm font-bold mb-1">{alert.type}</p>
-                    <p className="text-sm font-medium mb-2">{alert.location}</p>
+                  <div className="bg-white dark:bg-slate-800 p-3 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700">
+                    <div className="flex items-center gap-2 mb-2">
+                      {isReport ? (
+                        <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400">
+                          <FileText className="w-3 h-3" />
+                          <span>Report</span>
+                        </div>
+                      ) : (
+                        <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
+                          <AlertCircle className="w-3 h-3" />
+                          <span>Alert</span>
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-sm font-medium text-slate-800 dark:text-slate-200 mb-2">{alert.location}</p>
                     <p
-                      className="text-xs text-gray-200 mt-1 cursor-pointer hover:text-white transition"
-                      onClick={() => handleViewDetails(alert.id)}
+                      className="text-xs text-blue-600 dark:text-blue-400 cursor-pointer hover:text-blue-700 dark:hover:text-blue-300 transition-colors font-medium"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleViewDetails(alert.id);
+                      }}
                     >
                       Click to view details
                     </p>

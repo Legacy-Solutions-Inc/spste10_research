@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabaseBrowser";
 import EditableSection from "./components/EditableSection";
 import ChangePasswordSection from "./components/ChangePasswordSection";
 import { validatePhoneNumber, validateTextField } from "./utils/validation";
+import { Card } from "@/components/ui/card";
+import { User, Mail, Lock, MapPin, Phone } from "lucide-react";
 
 interface ProfileData {
   id?: string;
@@ -34,7 +36,7 @@ export default function SettingsForm({ initialData, userEmail }: SettingsFormPro
       throw new Error("User not authenticated. Please log in again.");
     }
 
-    // Update profile (full_name)
+    // Update full_name in profiles table (responder_profiles doesn't have this field)
     if (updates.full_name !== undefined) {
       const { error: profileError } = await supabase
         .from("profiles")
@@ -47,7 +49,7 @@ export default function SettingsForm({ initialData, userEmail }: SettingsFormPro
       }
     }
 
-    // Update responder profile fields
+    // Build responder profile fields (exclude full_name - it belongs to profiles table)
     const responderFields: Record<string, string | null> = {};
     if (updates.municipality !== undefined) responderFields.municipality = updates.municipality;
     if (updates.province !== undefined) responderFields.province = updates.province;
@@ -166,74 +168,84 @@ export default function SettingsForm({ initialData, userEmail }: SettingsFormPro
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 w-full overflow-hidden">
       {/* Profile Info Section */}
-      <EditableSection
-        title="Profile Info"
-        fields={[
-          {
-            label: "Full Name",
-            value: initialData?.full_name || null,
-            fieldKey: "full_name",
-            type: "text",
-            placeholder: "Enter your full name",
-            validation: (value) => validateTextField(value, "Full name", 100),
-          },
-          {
-            label: "Municipality",
-            value: initialData?.municipality || null,
-            fieldKey: "municipality",
-            type: "text",
-            placeholder: "Enter your municipality",
-            validation: (value) => validateTextField(value, "Municipality", 100),
-          },
-          {
-            label: "Province",
-            value: initialData?.province || null,
-            fieldKey: "province",
-            type: "text",
-            placeholder: "Enter your province",
-            validation: (value) => validateTextField(value, "Province", 100),
-          },
-          {
-            label: "Office Address",
-            value: initialData?.office_address || null,
-            fieldKey: "office_address",
-            type: "text",
-            placeholder: "Enter your office address",
-            validation: (value) => validateTextField(value, "Office address", 255),
-          },
-        ]}
-        onSave={handleProfileSave}
-      />
+      <Card className="bg-white dark:bg-slate-800 shadow-md w-full overflow-hidden">
+        <EditableSection
+          title="Profile Info"
+          icon={User}
+          fields={[
+            {
+              label: "Full Office Name",
+              value: initialData?.full_name || null,
+              fieldKey: "full_name",
+              type: "text",
+              placeholder: "Enter your full name",
+              validation: (value) => validateTextField(value, "Full name", 100),
+            },
+            {
+              label: "Municipality",
+              value: initialData?.municipality || null,
+              fieldKey: "municipality",
+              type: "text",
+              placeholder: "Enter your municipality",
+              validation: (value) => validateTextField(value, "Municipality", 100),
+            },
+            {
+              label: "Province",
+              value: initialData?.province || null,
+              fieldKey: "province",
+              type: "text",
+              placeholder: "Enter your province",
+              validation: (value) => validateTextField(value, "Province", 100),
+            },
+            {
+              label: "Office Address",
+              value: initialData?.office_address || null,
+              fieldKey: "office_address",
+              type: "text",
+              placeholder: "Enter your office address",
+              validation: (value) => validateTextField(value, "Office address", 255),
+            },
+          ]}
+          onSave={handleProfileSave}
+        />
+      </Card>
 
       {/* Contact Info Section */}
-      <EditableSection
-        title="Contact Info"
-        fields={[
-          {
-            label: "Email",
-            value: userEmail || initialData?.email || null,
-            fieldKey: "email",
-            type: "email",
-            disabled: true,
-            helperText: "Email cannot be changed. Contact support if you need to update it.",
-          },
-          {
-            label: "Contact Number",
-            value: initialData?.contact_number || null,
-            fieldKey: "contact_number",
-            type: "tel",
-            placeholder: "Enter your contact number (e.g., +63 912 345 6789)",
-            validation: validatePhoneNumber,
-            helperText: "Format: digits and common formatting characters (spaces, dashes, parentheses)",
-          },
-        ]}
-        onSave={handleContactSave}
-      />
+      <Card className="bg-white dark:bg-slate-800 shadow-md w-full overflow-hidden">
+        <EditableSection
+          title="Contact Info"
+          icon={Mail}
+          fields={[
+            {
+              label: "Email",
+              value: userEmail || initialData?.email || null,
+              fieldKey: "email",
+              type: "email",
+              disabled: true,
+              helperText: "Email cannot be changed. Contact support if you need to update it.",
+              icon: Mail,
+            },
+            {
+              label: "Contact Number",
+              value: initialData?.contact_number || null,
+              fieldKey: "contact_number",
+              type: "tel",
+              placeholder: "Enter your contact number (e.g., +63 912 345 6789)",
+              validation: validatePhoneNumber,
+              helperText: "Format: digits and common formatting characters (spaces, dashes, parentheses)",
+              icon: Phone,
+            },
+          ]}
+          onSave={handleContactSave}
+        />
+      </Card>
 
       {/* Change Password Section */}
-      <ChangePasswordSection onSave={handlePasswordSave} />
+      <Card className="bg-white dark:bg-slate-800 shadow-md w-full overflow-hidden">
+        <ChangePasswordSection icon={Lock} onSave={handlePasswordSave} />
+      </Card>
     </div>
   );
 }

@@ -10,10 +10,10 @@ export const metadata = {
 export default async function DashboardPage() {
   const supabase = createClient();
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (!session) {
+  if (!user) {
     redirect("/");
   }
 
@@ -22,7 +22,7 @@ export default async function DashboardPage() {
   const { data: profileRaw } = await supabase
     .from("profiles")
     .select("role")
-    .eq("id", session.user.id)
+    .eq("id", user.id)
     .single();
 
   // Type assertion for profile data
