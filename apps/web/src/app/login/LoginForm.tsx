@@ -98,13 +98,13 @@ export default function LoginForm() {
 
       if (data.session && data.user) {
         // Check user role
-        const { data: profile, error: profileError } = await supabase
+        const { data: profileRaw, error: profileError } = await supabase
           .from("profiles")
           .select("role")
           .eq("id", data.user.id)
           .single();
 
-        if (profileError || !profile) {
+        if (profileError || !profileRaw) {
           setErrors({
             general: "Failed to verify account. Please try again.",
           });
@@ -113,6 +113,9 @@ export default function LoginForm() {
           return;
         }
 
+        // Type assertion for Supabase query result
+        type ProfileData = { role: string };
+        const profile = profileRaw as ProfileData;
         const userRole = profile.role;
         
         // Block user role from web app
