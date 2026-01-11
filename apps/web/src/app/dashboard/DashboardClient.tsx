@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import dynamic from "next/dynamic";
 import Sidebar from "@/components/Sidebar";
 import AlertsList from "@/components/AlertsList";
@@ -11,6 +11,8 @@ import { useUpdateAssignment } from "@/hooks/useUpdateAssignment";
 import { useResponderLocation } from "@/hooks/useResponderLocation";
 import { incidentToAlert } from "@/types/alert";
 import type { Incident } from "@/types/incident";
+import { useToast } from "@/components/ui/use-toast";
+import { requestNotificationPermission, showIncidentNotification, playNotificationSound } from "@/lib/notifications";
 
 // Dynamically import MapComponent to avoid SSR issues
 const MapComponent = dynamic(() => import("@/components/MapComponent"), {
@@ -26,7 +28,8 @@ const MapComponent = dynamic(() => import("@/components/MapComponent"), {
 const ILOILO_CENTER: [number, number] = [10.7202, 122.5621];
 
 export default function DashboardClient() {
-  const { incidents, loading, error, refetch } = useFetchIncidents();
+  const { toast } = useToast();
+  const [notificationPermission, setNotificationPermission] = useState<"default" | "granted" | "denied">("default");
   const { createAssignment, loading: creatingAssignment } = useCreateAssignment();
   const { updateAssignment, loading: updatingAssignment } = useUpdateAssignment();
   const { coordinates: responderCoordinates, loading: loadingLocation, address: responderAddress, error: locationError } = useResponderLocation();
@@ -34,6 +37,46 @@ export default function DashboardClient() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+
+  // Handle new incidents with notifications
+  const handleNewIncident = useCallback((newIncidents: Incident[]) => {
+    newIncidents.forEach((incident) => {
+      const incidentType = incident.type === "alert" ? "Emergency Alert" : "Emergency Report";
+      const location = incident.location_name || "Unknown location";
+
+      // Show toast notification
+      toast({
+        title: `New ${incidentType}`,
+        description: `Location: ${location}`,
+        variant: "default",
+      });
+
+      // Show browser notification (if permission granted)
+      if (notificationPermission === "granted") {
+        showIncidentNotification(incident);
+      }
+
+      // Play sound notification
+      playNotificationSound();
+    });
+  }, [toast, notificationPermission]);
+
+  const { incidents, loading, error, refetch } = useFetchIncidents(handleNewIncident);
+
+  // Request notification permission on mount
+  useEffect(() => {
+    const requestPermission = async () => {
+      if ("Notification" in window) {
+        if (Notification.permission === "default") {
+          const permission = await requestNotificationPermission();
+          setNotificationPermission(permission);
+        } else {
+          setNotificationPermission(Notification.permission);
+        }
+      }
+    };
+    requestPermission();
+  }, []);
 
   // Debug logging for responder location
   useEffect(() => {

@@ -39,16 +39,18 @@ export function formatTimestamp(timestamp: string): string {
  */
 export function incidentToHistoryItem(
   incident: Incident,
-  reporterNames?: Map<string, string>
+  reporterNames?: Map<string, string>,
+  alertCreatorNames?: Map<string, string>
 ): HistoryItem {
   // Map response_status to status
   const status: "accepted" | "dismissed" =
     incident.assignmentStatus === "accepted" ? "accepted" : "dismissed";
 
-  // Extract name - for alerts use victim_name, for reports use reporter name from map
+  // Extract name - for alerts use victim_name, fallback to alert creator name, then "Unknown"
+  // For reports use reporter name from map
   const name =
     incident.type === "alert"
-      ? incident.victim_name || "Unknown"
+      ? incident.victim_name || alertCreatorNames?.get(incident.id) || "Unknown"
       : (reporterNames?.get(incident.id)) || "Unknown Reporter";
 
   return {

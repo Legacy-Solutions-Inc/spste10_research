@@ -39,6 +39,32 @@ export function useLogin() {
       }
 
       if (data.session) {
+        // Check user role
+        const { data: profile, error: profileError } = await supabase!
+          .from("profiles")
+          .select("role")
+          .eq("id", data.user.id)
+          .single();
+
+        if (profileError) {
+          Alert.alert("Error", "Failed to verify account. Please try again.");
+          await supabase!.auth.signOut();
+          return false;
+        }
+
+        const userRole = profile?.role;
+        
+        // Block responder and admin roles from mobile app
+        if (userRole === "responder" || userRole === "admin") {
+          await supabase!.auth.signOut();
+          Alert.alert(
+            "Access Denied",
+            "This account is for responders only. Please use the web application to log in."
+          );
+          return false;
+        }
+
+        // Allow user role to proceed
         navigation.replace("Home");
         return true;
       }
