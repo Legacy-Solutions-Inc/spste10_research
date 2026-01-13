@@ -36,6 +36,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.23.7",
+    "@expo/config-plugins": "~9.0.0",
     "@repo/config": "workspace:*",
     "@types/react": "~19.1.10",
     "babel-preset-expo": "~54.0.9",
