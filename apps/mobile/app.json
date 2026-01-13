@@ -23,7 +23,6 @@
     },
     "scheme": "mobile",
     "plugins": [
-      "./plugins/withJfrogVersion",
       [
         "expo-build-properties",
         {
