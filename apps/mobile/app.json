@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "mobile",
-    "slug": "mobile",
+    "slug": "spste10-research",
     "version": "1.0.0",
     "sdkVersion": "54.0.0",
     "orientation": "portrait",
@@ -23,7 +23,25 @@
       },
       "package": "com.spste10.mobile"
     },
-    "scheme": "mobile"
+    "scheme": "mobile",
+    "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 36,
+            "targetSdkVersion": 36,
+            "minSdkVersion": 24,
+            "kotlinVersion": "2.1.20"
+          }
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "6f47d756-b5ab-41e2-acf2-678fb775d915"
+      }
+    }
   }
 }
 
