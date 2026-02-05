@@ -116,7 +116,6 @@ export function useSupabaseSubscription(
         .channel(channelName)
         // We intentionally keep the payload as `any` because table
         // types are not fully generated yet.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .on(
           "postgres_changes",
           {
