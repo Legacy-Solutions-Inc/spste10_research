@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabaseBrowser";
+import { useSupabaseSubscription } from "./useSupabaseSubscription";
 import type { Incident, AlertRow, ReportRow, ResponderAssignment } from "@/types/incident";
 import { alertToIncident, reportToIncident } from "@/types/incident";
 
@@ -12,6 +13,9 @@ export function useFetchHistory() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const refetch = useCallback(() => {
+    setRefreshTrigger((prev) => prev + 1);
+  }, []);
 
   useEffect(() => {
     const fetchHistory = async () => {
@@ -186,9 +190,26 @@ export function useFetchHistory() {
     fetchHistory();
   }, [refreshTrigger]);
 
-  const refetch = () => {
-    setRefreshTrigger((prev) => prev + 1);
-  };
+  // When responder assignments change (accepted / rejected etc.), refresh history.
+  // We listen broadly on the table and rely on the query in fetchHistory
+  // to scope results to the current user.
+  useSupabaseSubscription(
+    [
+      {
+        event: "INSERT",
+        table: "responder_assignments",
+        onChange: () => refetch(),
+        channel: "responder-assignments-insert",
+      },
+      {
+        event: "UPDATE",
+        table: "responder_assignments",
+        onChange: () => refetch(),
+        channel: "responder-assignments-update",
+      },
+    ],
+    { enabled: true }
+  );
 
   return { incidents, reporterNames, alertCreatorNames, loading, error, refetch };
 }
