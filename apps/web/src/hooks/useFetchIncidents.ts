@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@/lib/supabaseBrowser";
+import { useSupabaseSubscription } from "./useSupabaseSubscription";
 import type { Incident, AlertRow, ReportRow, ResponderAssignment } from "@/types/incident";
 import { alertToIncident, reportToIncident } from "@/types/incident";
 
@@ -12,6 +13,10 @@ export function useFetchIncidents(onNewIncident?: (newIncidents: Incident[]) => 
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const previousIncidentIdsRef = useRef<Set<string>>(new Set());
   const isInitialLoadRef = useRef(true);
+
+  const refetch = useCallback(() => {
+    setRefreshTrigger((prev) => prev + 1);
+  }, []);
 
   useEffect(() => {
     const fetchIncidents = async () => {
@@ -127,77 +132,45 @@ export function useFetchIncidents(onNewIncident?: (newIncidents: Incident[]) => 
     };
 
     fetchIncidents();
-
-    // Set up realtime subscription for new incidents
-    const supabase = createClient();
-    
-    // Subscribe to INSERT events for new alerts
-    const alertsChannel = supabase
-      .channel("alerts-changes")
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "alerts",
-          filter: "status=eq.pending",
-        },
-        () => {
-          fetchIncidents();
-        }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "alerts",
-          filter: "status=eq.pending",
-        },
-        () => {
-          fetchIncidents();
-        }
-      )
-      .subscribe();
-
-    // Subscribe to INSERT events for new reports
-    const reportsChannel = supabase
-      .channel("reports-changes")
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "reports",
-          filter: "status=eq.pending",
-        },
-        () => {
-          fetchIncidents();
-        }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "reports",
-          filter: "status=eq.pending",
-        },
-        () => {
-          fetchIncidents();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(alertsChannel);
-      supabase.removeChannel(reportsChannel);
-    };
   }, [refreshTrigger, onNewIncident]);
 
-  const refetch = () => {
-    setRefreshTrigger((prev) => prev + 1);
-  };
+  // Set up realtime subscriptions for new and updated pending incidents.
+  // We only trigger a refetch here; the logic inside fetchIncidents
+  // is responsible for detecting new incidents vs initial load and
+  // invoking onNewIncident accordingly.
+  useSupabaseSubscription(
+    [
+      {
+        event: "INSERT",
+        table: "alerts",
+        filter: "status=eq.pending",
+        onChange: () => refetch(),
+        channel: "alerts-changes-insert",
+      },
+      {
+        event: "UPDATE",
+        table: "alerts",
+        filter: "status=eq.pending",
+        onChange: () => refetch(),
+        channel: "alerts-changes-update",
+      },
+      {
+        event: "INSERT",
+        table: "reports",
+        filter: "status=eq.pending",
+        onChange: () => refetch(),
+        channel: "reports-changes-insert",
+      },
+      {
+        event: "UPDATE",
+        table: "reports",
+        filter: "status=eq.pending",
+        onChange: () => refetch(),
+        channel: "reports-changes-update",
+      },
+    ],
+    { enabled: true }
+  );
 
   return { incidents, loading, error, refetch };
 }
