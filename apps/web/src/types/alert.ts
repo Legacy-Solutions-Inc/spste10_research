@@ -17,6 +17,7 @@ export interface Alert {
   // Assignment info
   isAssigned?: boolean;
   assignmentStatus?: string;
+  reporterName?: string;
 }
 
 // Helper to convert Incident to legacy Alert format for components
@@ -29,14 +30,15 @@ export function incidentToAlert(incident: import('./incident').Incident): Alert 
     timestamp: incident.timestamp,
     latitude: incident.latitude,
     longitude: incident.longitude,
-    name: incident.victim_name || undefined,
-    age: incident.victim_age || undefined,
-    bloodType: incident.victim_blood_type || undefined,
-    sex: incident.victim_sex || undefined,
+    name: incident.victim_name || incident.reporter_name || undefined,
+    age: incident.victim_age || incident.reporter_age || undefined,
+    bloodType: incident.victim_blood_type || incident.reporter_blood_type || undefined,
+    sex: incident.victim_sex || incident.reporter_sex || undefined,
     imageUrl: incident.image_url || undefined, // This may be a storage path
     description: incident.description || undefined,
     isAssigned: incident.isAssigned,
     assignmentStatus: incident.assignmentStatus,
+    reporterName: incident.reporter_name || undefined,
   };
 }
 

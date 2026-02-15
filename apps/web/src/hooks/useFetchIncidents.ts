@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createClient } from "@/lib/supabaseBrowser";
-import { useSupabaseSubscription } from "./useSupabaseSubscription";
+import { useSupabaseSubscription, SubscriptionConfig } from "./useSupabaseSubscription";
 import type { Incident, AlertRow, ReportRow, ResponderAssignment } from "@/types/incident";
 import { alertToIncident, reportToIncident } from "@/types/incident";
 
@@ -20,12 +20,14 @@ export function useFetchIncidents(onNewIncident?: (newIncidents: Incident[]) => 
 
   useEffect(() => {
     const fetchIncidents = async () => {
-      setLoading(true);
+      if (isInitialLoadRef.current) {
+        setLoading(true);
+      }
       setError(null);
 
       try {
         const supabase = createClient();
-        
+
         // Get current user
         const {
           data: { user },
@@ -89,16 +91,80 @@ export function useFetchIncidents(onNewIncident?: (newIncidents: Incident[]) => 
           });
         }
 
+        // Fetch all user IDs (from both alerts and reports)
+        const allUserIds = [
+          ...new Set([
+            ...(alertsData || []).map((a: AlertRow) => a.user_id),
+            ...(reportsData || []).map((r: ReportRow) => r.user_id),
+          ]),
+        ];
+
+        // Fetch user names from profiles
+        const userIdToNameMap = new Map<string, string>();
+        if (allUserIds.length > 0) {
+          const { data: profilesData, error: profilesError } = await supabase
+            .from("profiles")
+            .select("id, full_name")
+            .in("id", allUserIds);
+
+          if (!profilesError && profilesData) {
+            // Create map: user_id -> full_name
+            profilesData.forEach((profile: { id: string; full_name: string | null }) => {
+              if (profile.full_name) {
+                userIdToNameMap.set(profile.id, profile.full_name);
+              }
+            });
+          }
+        }
+
+        // Fetch user profiles (age, blood_type, gender) from user_profiles table
+        const userIdToProfileMap = new Map<string, { age?: number; blood_type?: string; gender?: string }>();
+        if (allUserIds.length > 0) {
+          // @ts-ignore - Supabase types may not be fully generated
+          const { data: userProfilesData, error: userProfilesError } = await supabase
+            .from("user_profiles")
+            .select("id, age, blood_type, gender")
+            .in("id", allUserIds);
+
+          if (!userProfilesError && userProfilesData) {
+            userProfilesData.forEach((profile: { id: string; age?: number; blood_type?: string; gender?: string }) => {
+              userIdToProfileMap.set(profile.id, {
+                age: profile.age,
+                blood_type: profile.blood_type,
+                gender: profile.gender,
+              });
+            });
+          }
+        }
+
         // Convert alerts to incidents
         const alertIncidents: Incident[] = (alertsData || []).map((alert: AlertRow) => {
           const assignment = assignmentsMap.get(alert.id);
-          return alertToIncident(alert, assignment);
+          const reporterName = userIdToNameMap.get(alert.user_id);
+          const reporterProfile = userIdToProfileMap.get(alert.user_id);
+          return alertToIncident(
+            alert,
+            assignment,
+            reporterName,
+            reporterProfile?.age,
+            reporterProfile?.blood_type,
+            reporterProfile?.gender
+          );
         });
 
         // Convert reports to incidents
         const reportIncidents: Incident[] = (reportsData || []).map((report: ReportRow) => {
           const assignment = assignmentsMap.get(report.id);
-          return reportToIncident(report, assignment);
+          const reporterName = userIdToNameMap.get(report.user_id);
+          const reporterProfile = userIdToProfileMap.get(report.user_id);
+          return reportToIncident(
+            report,
+            assignment,
+            reporterName,
+            reporterProfile?.age,
+            reporterProfile?.blood_type,
+            reporterProfile?.gender
+          );
         });
 
         // Combine and sort by created_at
@@ -110,11 +176,11 @@ export function useFetchIncidents(onNewIncident?: (newIncidents: Incident[]) => 
         if (!isInitialLoadRef.current && onNewIncident) {
           const currentIds = new Set(allIncidents.map(inc => inc.id));
           const newIncidents = allIncidents.filter(inc => !previousIncidentIdsRef.current.has(inc.id));
-          
+
           if (newIncidents.length > 0) {
             onNewIncident(newIncidents);
           }
-          
+
           previousIncidentIdsRef.current = currentIds;
         } else if (isInitialLoadRef.current) {
           // Store initial incident IDs
@@ -138,39 +204,43 @@ export function useFetchIncidents(onNewIncident?: (newIncidents: Incident[]) => 
   // We only trigger a refetch here; the logic inside fetchIncidents
   // is responsible for detecting new incidents vs initial load and
   // invoking onNewIncident accordingly.
-  useSupabaseSubscription(
-    [
-      {
-        event: "INSERT",
-        table: "alerts",
-        filter: "status=eq.pending",
-        onChange: () => refetch(),
-        channel: "alerts-changes-insert",
-      },
-      {
-        event: "UPDATE",
-        table: "alerts",
-        filter: "status=eq.pending",
-        onChange: () => refetch(),
-        channel: "alerts-changes-update",
-      },
-      {
-        event: "INSERT",
-        table: "reports",
-        filter: "status=eq.pending",
-        onChange: () => refetch(),
-        channel: "reports-changes-insert",
-      },
-      {
-        event: "UPDATE",
-        table: "reports",
-        filter: "status=eq.pending",
-        onChange: () => refetch(),
-        channel: "reports-changes-update",
-      },
-    ],
-    { enabled: true }
-  );
+  // Memoize the subscription configuration to prevent unnecessary re-subscriptions
+  const subscriptionConfig = useMemo<SubscriptionConfig[]>(() => [
+    {
+      event: "INSERT",
+      table: "alerts",
+      filter: "status=eq.pending",
+      onChange: () => refetch(),
+    },
+    {
+      event: "UPDATE",
+      table: "alerts",
+      filter: "status=eq.pending",
+      onChange: () => refetch(),
+    },
+    {
+      event: "INSERT",
+      table: "reports",
+      filter: "status=eq.pending",
+      onChange: () => refetch(),
+    },
+    {
+      event: "UPDATE",
+      table: "reports",
+      filter: "status=eq.pending",
+      onChange: () => refetch(),
+    },
+  ], [refetch]);
+
+  useSupabaseSubscription(subscriptionConfig, { enabled: true });
+
+  // Poll every 5 seconds as a fallback
+  useEffect(() => {
+    const interval = setInterval(() => {
+      refetch();
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [refetch]);
 
   return { incidents, loading, error, refetch };
 }

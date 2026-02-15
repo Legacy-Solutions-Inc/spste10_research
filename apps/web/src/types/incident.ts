@@ -71,10 +71,21 @@ export interface Incident {
   assignment?: ResponderAssignment | null;
   isAssigned?: boolean;
   assignmentStatus?: ResponseStatus;
+  reporter_name?: string | null;
+  reporter_age?: number | null;
+  reporter_blood_type?: string | null;
+  reporter_sex?: string | null;
 }
 
 // Helper function to convert alert to incident
-export function alertToIncident(alert: AlertRow, assignment?: ResponderAssignment | null): Incident {
+export function alertToIncident(
+  alert: AlertRow,
+  assignment?: ResponderAssignment | null,
+  reporterName?: string | null,
+  reporterAge?: number | null,
+  reporterBloodType?: string | null,
+  reporterSex?: string | null
+): Incident {
   return {
     id: alert.id,
     type: 'alert',
@@ -94,11 +105,22 @@ export function alertToIncident(alert: AlertRow, assignment?: ResponderAssignmen
     assignment: assignment || null,
     isAssigned: !!assignment,
     assignmentStatus: assignment?.response_status,
+    reporter_name: reporterName,
+    reporter_age: reporterAge,
+    reporter_blood_type: reporterBloodType,
+    reporter_sex: reporterSex,
   };
 }
 
 // Helper function to convert report to incident
-export function reportToIncident(report: ReportRow, assignment?: ResponderAssignment | null): Incident {
+export function reportToIncident(
+  report: ReportRow,
+  assignment?: ResponderAssignment | null,
+  reporterName?: string | null,
+  reporterAge?: number | null,
+  reporterBloodType?: string | null,
+  reporterSex?: string | null
+): Incident {
   return {
     id: report.id,
     type: 'report',
@@ -116,5 +138,9 @@ export function reportToIncident(report: ReportRow, assignment?: ResponderAssign
     assignment: assignment || null,
     isAssigned: !!assignment,
     assignmentStatus: assignment?.response_status,
+    reporter_name: reporterName,
+    reporter_age: reporterAge,
+    reporter_blood_type: reporterBloodType,
+    reporter_sex: reporterSex,
   };
 }

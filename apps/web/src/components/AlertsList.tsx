@@ -88,21 +88,19 @@ export default function AlertsList({
               <div
                 key={alert.id}
                 onClick={() => onSelectAlert(alert)}
-                className={`bg-white dark:bg-slate-800 border rounded-xl p-5 cursor-pointer transition-all duration-200 hover:shadow-lg hover:scale-[1.02] ${
-                  isSelected
+                className={`bg-white dark:bg-slate-800 border rounded-xl p-5 cursor-pointer transition-all duration-200 hover:shadow-lg hover:scale-[1.02] ${isSelected
                     ? "border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900/20 shadow-md"
                     : "border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600"
-                }`}
+                  }`}
               >
                 {/* Header with Badge */}
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <div
-                      className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
-                        isAlert
+                      className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${isAlert
                           ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
                           : "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"
-                      }`}
+                        }`}
                     >
                       {isAlert ? (
                         <AlertCircle className="w-3.5 h-3.5" />
@@ -114,19 +112,18 @@ export default function AlertsList({
                   </div>
                   {alert.isAssigned && (
                     <span
-                      className={`text-xs px-2 py-1 rounded-full font-medium ${
-                        alert.assignmentStatus === "accepted"
+                      className={`text-xs px-2 py-1 rounded-full font-medium ${alert.assignmentStatus === "accepted"
                           ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
                           : alert.assignmentStatus === "rejected"
-                          ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
-                          : "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
-                      }`}
+                            ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                            : "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
+                        }`}
                     >
                       {alert.assignmentStatus === "accepted"
                         ? "Accepted"
                         : alert.assignmentStatus === "rejected"
-                        ? "Rejected"
-                        : "Pending"}
+                          ? "Rejected"
+                          : "Pending"}
                     </span>
                   )}
                 </div>
@@ -152,17 +149,22 @@ export default function AlertsList({
                   </p>
                 </div>
 
-                {/* Victim Details (for Alerts) */}
-                {isAlert && alert.name && (
+                {/* Reporter / Victim Details */}
+                {alert.name && (
                   <div className="flex items-start gap-2 mb-3 p-2 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
                     <User className="w-4 h-4 text-slate-400 dark:text-slate-500 mt-0.5 flex-shrink-0" />
                     <div className="text-sm text-slate-700 dark:text-slate-300">
                       <p className="font-medium">{alert.name}</p>
-                      {(alert.age || alert.bloodType) && (
+                      {isAlert && (alert.age || alert.bloodType) && (
                         <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                           {alert.age && `${alert.age} years old`}
                           {alert.age && alert.bloodType && " • "}
                           {alert.bloodType && `Blood Type: ${alert.bloodType}`}
+                        </p>
+                      )}
+                      {!isAlert && (
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                          Reporter
                         </p>
                       )}
                     </div>
