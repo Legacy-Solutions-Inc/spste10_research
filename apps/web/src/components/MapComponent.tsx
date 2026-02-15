@@ -134,11 +134,11 @@ export default function MapComponent({
   useEffect(() => {
     const fetchImageUrls = async () => {
       const urlMap: Record<string, string> = {};
-      
+
       for (const alert of alerts) {
         if (alert.imageUrl && alert.type === "Emergency Report") {
           console.log(`[MapComponent] Processing image for alert ${alert.id}:`, alert.imageUrl);
-          
+
           // If it's already a full HTTP/HTTPS URL that's not a storage URL, use as-is
           if (alert.imageUrl.startsWith("http://") || alert.imageUrl.startsWith("https://")) {
             // Check if it's a Supabase storage URL (needs signed URL) or external URL (use as-is)
@@ -159,7 +159,7 @@ export default function MapComponent({
             // It's a storage path, need to get signed URL
             const filePath = extractFilePath(alert.imageUrl, "report-images");
             console.log(`[MapComponent] Extracted file path for ${alert.id}:`, filePath);
-            
+
             if (filePath) {
               try {
                 const signedUrl = await getSignedUrl("report-images", filePath);
@@ -178,7 +178,7 @@ export default function MapComponent({
           }
         }
       }
-      
+
       console.log(`[MapComponent] Final image URLs:`, urlMap);
       setImageUrls(urlMap);
     };
@@ -241,7 +241,7 @@ export default function MapComponent({
           const isReport = alert.type === "Emergency Report";
           // Use custom icon based on alert type, fallback to DefaultIcon if custom icons not available
           const icon = getIcon(isReport);
-          
+
           return (
             <Marker
               key={alert.id}
@@ -261,13 +261,18 @@ export default function MapComponent({
                           <span>Emergency Report</span>
                         </div>
                       </div>
-                      
+
                       {/* Location */}
                       <div className="flex items-start gap-2 mb-2">
                         <MapPin className="w-4 h-4 text-slate-400 dark:text-slate-500 mt-0.5 flex-shrink-0" />
-                        <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">{alert.location}</p>
+                        <div>
+                          <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">{alert.location}</p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+                            {alert.latitude.toFixed(6)}, {alert.longitude.toFixed(6)}
+                          </p>
+                        </div>
                       </div>
-                      
+
                       {/* Time */}
                       <div className="flex items-center gap-2 mb-3">
                         <Clock className="w-4 h-4 text-slate-400 dark:text-slate-500" />
@@ -275,7 +280,7 @@ export default function MapComponent({
                           {new Date(alert.timestamp).toLocaleString()}
                         </p>
                       </div>
-                      
+
                       {/* Reporter */}
                       {alert.name && (
                         <div className="flex items-start gap-2 mb-3">
@@ -292,7 +297,7 @@ export default function MapComponent({
                         // Check if it's already a full URL
                         const fullUrl = alert.imageUrl && (alert.imageUrl.startsWith("http://") || alert.imageUrl.startsWith("https://")) ? alert.imageUrl : null;
                         const imageUrl = signedUrl || fullUrl;
-                        
+
                         if (imageUrl) {
                           return (
                             <div className="mb-3 rounded-lg overflow-hidden bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600">
@@ -327,7 +332,7 @@ export default function MapComponent({
                           );
                         }
                       })()}
-                      
+
                       {/* Report description */}
                       {alert.description && (
                         <div className="mb-4">
@@ -365,13 +370,18 @@ export default function MapComponent({
                           <span>Emergency Alert</span>
                         </div>
                       </div>
-                      
+
                       {/* Location */}
                       <div className="flex items-start gap-2 mb-2">
                         <MapPin className="w-4 h-4 text-slate-400 dark:text-slate-500 mt-0.5 flex-shrink-0" />
-                        <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">{alert.location}</p>
+                        <div>
+                          <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">{alert.location}</p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+                            {alert.latitude.toFixed(6)}, {alert.longitude.toFixed(6)}
+                          </p>
+                        </div>
                       </div>
-                      
+
                       {/* Time */}
                       <div className="flex items-center gap-2 mb-3">
                         <Clock className="w-4 h-4 text-slate-400 dark:text-slate-500" />
@@ -379,7 +389,7 @@ export default function MapComponent({
                           {new Date(alert.timestamp).toLocaleString()}
                         </p>
                       </div>
-                      
+
                       {/* Victim Details */}
                       {alert.name && (
                         <div className="mb-3 p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
@@ -446,7 +456,12 @@ export default function MapComponent({
                         </div>
                       )}
                     </div>
-                    <p className="text-sm font-medium text-slate-800 dark:text-slate-200 mb-2">{alert.location}</p>
+                    <div className="mb-2">
+                      <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{alert.location}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">
+                        {alert.latitude.toFixed(6)}, {alert.longitude.toFixed(6)}
+                      </p>
+                    </div>
                     <p
                       className="text-xs text-blue-600 dark:text-blue-400 cursor-pointer hover:text-blue-700 dark:hover:text-blue-300 transition-colors font-medium"
                       onClick={(e) => {
