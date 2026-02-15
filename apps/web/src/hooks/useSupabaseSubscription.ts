@@ -1,9 +1,9 @@
 import { useEffect, useState, useMemo } from "react";
 import { createClient } from "@/lib/supabaseBrowser";
 
-type PostgresChangeEvent = "INSERT" | "UPDATE" | "DELETE" | "*";
+export type PostgresChangeEvent = "INSERT" | "UPDATE" | "DELETE" | "*";
 
-type SubscriptionConfig = {
+export type SubscriptionConfig = {
   /**
    * Postgres event type to listen for (INSERT, UPDATE, DELETE, or *).
    */
