@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "6f47d756-b5ab-41e2-acf2-678fb775d915"
+      }
+    },
+    "android": {
+      "package": "com.rafaeliii2.spste10research"
+    }
+  }
+}
