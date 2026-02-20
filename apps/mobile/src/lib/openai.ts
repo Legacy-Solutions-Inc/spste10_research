@@ -5,11 +5,11 @@
 
 import Constants from "expo-constants";
 
-const getApiOrigin = (): string | null => {
+const getApiOrigin = (): string => {
   return (
     process.env.EXPO_PUBLIC_API_ORIGIN ||
     Constants.expoConfig?.extra?.apiOrigin ||
-    null
+    "https://agap-responders.vercel.app"
   );
 };
 
@@ -20,25 +20,24 @@ const getApiOrigin = (): string | null => {
  */
 async function imageUriToBase64(imageUri: string): Promise<string> {
   try {
-    const arrayBuffer = await new Promise<ArrayBuffer>((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open("GET", imageUri, true);
-      xhr.responseType = "arraybuffer";
+    const response = await fetch(imageUri);
 
-      xhr.onload = () => {
-        if (xhr.status === 200) {
-          resolve(xhr.response);
-        } else {
-          reject(new Error(`Failed to load file: ${xhr.status}`));
-        }
-      };
-
-      xhr.onerror = () => {
-        reject(new Error("Network error loading file"));
-      };
-
-      xhr.send();
-    });
+    let arrayBuffer: ArrayBuffer;
+    if (typeof response.arrayBuffer === "function") {
+      arrayBuffer = await response.arrayBuffer();
+    } else {
+      arrayBuffer = await new Promise<ArrayBuffer>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("GET", imageUri, true);
+        xhr.responseType = "arraybuffer";
+        xhr.onload = () =>
+          xhr.status === 200
+            ? resolve(xhr.response)
+            : reject(new Error(`Failed to load file: ${xhr.status}`));
+        xhr.onerror = () => reject(new Error("Network error loading file"));
+        xhr.send();
+      });
+    }
 
     const bytes = new Uint8Array(arrayBuffer);
     let binary = "";
@@ -59,11 +58,6 @@ async function imageUriToBase64(imageUri: string): Promise<string> {
  */
 export async function analyzeEmergencyPhoto(imageUri: string): Promise<string> {
   const apiOrigin = getApiOrigin();
-
-  if (!apiOrigin) {
-    console.warn("[OpenAI] API origin not configured.");
-    throw new Error("OpenAI API key not configured");
-  }
 
   try {
     const base64Image = await imageUriToBase64(imageUri);
@@ -118,5 +112,5 @@ export async function analyzeEmergencyPhoto(imageUri: string): Promise<string> {
  * @returns true if API origin is available
  */
 export function isOpenAIConfigured(): boolean {
-  return getApiOrigin() !== null;
+  return true;
 }
