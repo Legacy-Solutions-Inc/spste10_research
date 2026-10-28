@@ -14,6 +14,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "@/navigation/types";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { SupabaseWarning } from "./components/SupabaseWarning";
+import { getApiOrigin } from "@/lib/openai";
 
 type ResetPasswordNav = NativeStackNavigationProp<RootStackParamList, "Login4">;
 
@@ -40,7 +41,10 @@ export function ResetPassword() {
 
     setLoading(true);
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(trimmed);
+      // The link opens the web app's reset page, since the mobile app has no deep link handler
+      const { error } = await supabase.auth.resetPasswordForEmail(trimmed, {
+        redirectTo: `${getApiOrigin()}/reset-password`,
+      });
       if (error) {
         Alert.alert("Error", error.message);
       } else {

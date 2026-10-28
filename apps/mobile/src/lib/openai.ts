@@ -5,7 +5,7 @@
 
 import Constants from "expo-constants";
 
-const getApiOrigin = (): string => {
+export const getApiOrigin = (): string => {
   return (
     process.env.EXPO_PUBLIC_API_ORIGIN ||
     Constants.expoConfig?.extra?.apiOrigin ||
