@@ -63,12 +63,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const { data } = await supabase!.auth.getSession();
         const restored = data.session;
-        if (restored) {
-          if (await hasMobileAccess(restored.user.id)) {
-            if (!cancelled) setAdmittedUserId(restored.user.id);
-          } else {
-            await supabase!.auth.signOut();
-          }
+        if (restored && !cancelled) {
+          // Let them in from the stored session right away; a weak network
+          // must not hold an emergency app on the boot screen. The role was
+          // checked at login, and is re-checked here in the background.
+          setAdmittedUserId(restored.user.id);
+          hasMobileAccess(restored.user.id).then((allowed) => {
+            if (!allowed) denyMobileAccess();
+          });
         }
       } catch (err) {
         console.error("Error restoring session:", err);

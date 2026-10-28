@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
 import { supabase } from "@/lib/supabase";
 import type { IncidentKind, IncidentStatus } from "@/lib/incidents";
@@ -30,12 +30,16 @@ export function isTerminal(status: IncidentStatus | undefined) {
 export function useLiveIncident(kind: IncidentKind, id: string | undefined) {
   const [incident, setIncident] = useState<LiveIncident | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Poll, Realtime and foreground refreshes can overlap; only the newest
+  // request may update state, so the status never flips back
+  const requestSeq = useRef(0);
 
   const table = kind === "alert" ? "alerts" : "reports";
   const assignmentColumn = kind === "alert" ? "alert_id" : "report_id";
 
   const refresh = useCallback(async () => {
     if (!id || !supabase) return;
+    const seq = ++requestSeq.current;
 
     const [incidentResult, assignmentsResult] = await Promise.all([
       supabase
@@ -49,6 +53,8 @@ export function useLiveIncident(kind: IncidentKind, id: string | undefined) {
         .select("response_status, responded_at, assigned_at")
         .eq(assignmentColumn, id),
     ]);
+
+    if (seq !== requestSeq.current) return;
 
     if (incidentResult.error || !incidentResult.data) {
       setError("Can't reach the server. Retrying…");
@@ -79,8 +85,10 @@ export function useLiveIncident(kind: IncidentKind, id: string | undefined) {
     if (!id || !supabase) return;
     refresh();
 
+    // A unique topic: re-entering the same incident quickly must not attach to
+    // the previous channel while it is still being removed
     const channel = supabase
-      .channel(`live-${kind}-${id}`)
+      .channel(`live-${kind}-${id}-${Date.now()}`)
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table, filter: `id=eq.${id}` },

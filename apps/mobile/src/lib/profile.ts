@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { currentUserId } from "@/lib/session";
 
 export const BLOOD_TYPES = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 export const SEX_OPTIONS = [
@@ -45,15 +46,6 @@ export function ageFromBirthday(birthday: string | null): number | null {
 export function isValidContactNumber(value: string): boolean {
   const digits = value.replace(/[\s-]/g, "");
   return /^\+?\d{10,13}$/.test(digits);
-}
-
-async function currentUserId(): Promise<string> {
-  if (!supabase) throw new Error("Supabase is not configured.");
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("You're signed out. Log in again.");
-  return user.id;
 }
 
 // select("*") rather than named columns so the form still loads if a newer

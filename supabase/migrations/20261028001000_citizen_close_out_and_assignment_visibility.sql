@@ -37,7 +37,7 @@ BEGIN
     RAISE EXCEPTION 'Not signed in';
   END IF;
 
-  IF p_outcome NOT IN ('completed', 'canceled') THEN
+  IF p_outcome IS NULL OR p_outcome NOT IN ('completed', 'canceled') THEN
     RAISE EXCEPTION 'Invalid outcome: %', p_outcome;
   END IF;
 

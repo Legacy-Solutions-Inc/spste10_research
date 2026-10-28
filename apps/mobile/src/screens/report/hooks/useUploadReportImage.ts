@@ -16,11 +16,12 @@ export function useUploadReportImage() {
       return null;
     }
 
-    // Get current user
+    // Current user from the stored session (no network round trip)
     const {
-      data: { user },
+      data: { session },
       error: userError,
-    } = await supabase!.auth.getUser();
+    } = await supabase!.auth.getSession();
+    const user = session?.user ?? null;
 
     if (userError || !user) {
       Alert.alert("Error", "You must be logged in to upload an image.");
@@ -85,7 +86,7 @@ export function useUploadReportImage() {
         console.error("Upload image error:", error);
         Alert.alert(
           "Photo didn't upload",
-          "Your report was still sent with your location and details."
+          "Your report will be sent without it, with your location and details."
         );
         return null;
       }
@@ -102,7 +103,7 @@ export function useUploadReportImage() {
       console.error("Upload image error:", error);
       Alert.alert(
         "Photo didn't upload",
-        "Your report was still sent with your location and details."
+        "Your report will be sent without it, with your location and details."
       );
       return null;
     } finally {

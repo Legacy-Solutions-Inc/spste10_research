@@ -29,9 +29,11 @@ import {
 } from "@/lib/location";
 import {
   createReport,
-  updatePendingReport,
+  updateOpenIncident,
   refineIncidentPosition,
 } from "@/lib/incidents";
+import { newId } from "@/lib/uuid";
+import { useHardwareBack } from "@/navigation/useHardwareBack";
 import colors from "@/theme/colors";
 import { useUploadReportImage } from "./hooks/useUploadReportImage";
 import { useAnalyzePhoto } from "./hooks/useAnalyzePhoto";
@@ -50,6 +52,8 @@ const DETAIL_CHIPS = [
   "Fire",
 ];
 const NOTE_MAX = 200;
+// A slow upload shouldn't hold the report back; it is sent without the photo
+const PHOTO_UPLOAD_TIMEOUT_MS = 20000;
 
 type Analysis =
   | { state: "running" }
@@ -77,6 +81,15 @@ export function ReportScreen3() {
   const [chips, setChips] = useState<string[]>([]);
   const [note, setNote] = useState("");
   const [sending, setSending] = useState(false);
+  // One id for every attempt: the photo is stored under it before the row
+  // exists, and a retry after a timeout can't create a second report
+  const reportIdRef = useRef(newId());
+
+  const goBack = () => {
+    if (!sending) navigation.goBack();
+  };
+  // Leaving mid-send and sending again would create a second report
+  useHardwareBack(goBack);
 
   // The AI description is generated in the background and never blocks Send
   useEffect(() => {
@@ -95,16 +108,18 @@ export function ReportScreen3() {
 
   const locate = useCallback(async () => {
     setLocation({ state: "locating" });
-    let permitted = false;
+    let permissionDenied = false;
     let position: QuickPosition | null = null;
     try {
-      permitted = await ensureLocationPermission();
+      const permitted = await ensureLocationPermission();
+      permissionDenied = !permitted;
       position = permitted ? await getQuickPosition() : null;
     } catch (err) {
+      // A failed check isn't a refusal; offer a retry rather than Settings
       console.log("Location error:", err);
     }
     if (!position) {
-      setLocation({ state: "missing", permissionDenied: !permitted });
+      setLocation({ state: "missing", permissionDenied });
       return;
     }
     setLocation({ state: "found", position });
@@ -136,23 +151,29 @@ export function ReportScreen3() {
     const userNote =
       [chips.join(", "), note.trim()].filter(Boolean).join("\n") || null;
 
+    const id = reportIdRef.current;
     try {
-      const id = await createReport({
+      // Upload first so the row is created with its photo: responders can
+      // see it immediately, and a quick acceptance can't leave it unattached
+      const imagePath = await Promise.race([
+        uploadImage(imageUri, id),
+        new Promise<null>((resolve) =>
+          setTimeout(() => resolve(null), PHOTO_UPLOAD_TIMEOUT_MS)
+        ),
+      ]);
+
+      await createReport(id, {
         coords: location.position,
         locationName: location.name,
+        imagePath,
         description: aiText,
         userNote,
       });
 
-      const imagePath = await uploadImage(imageUri, id);
-      if (imagePath) {
-        await updatePendingReport(id, { image_url: imagePath });
-      }
-
       // Attach the AI text whenever it finishes, even after this screen is gone
       if (!aiText && analysis.state === "running") {
         analysisRef.current?.then((text) => {
-          if (text) updatePendingReport(id, { description: text });
+          if (text) updateOpenIncident("report", id, { description: text });
         });
       }
       refineIncidentPosition("report", id, location.position, location.name);
@@ -183,7 +204,7 @@ export function ReportScreen3() {
 
   return (
     <Screen edges={["top"]}>
-      <ScreenHeader title="Review report" onBack={() => navigation.goBack()} />
+      <ScreenHeader title="Review report" onBack={goBack} />
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         className="flex-1"
@@ -291,15 +312,19 @@ export function ReportScreen3() {
                   : "We can't find your location yet. Move near a window or outside."}
               </Text>
               <CallHotlineButton className="mb-2" />
-              {location.permissionDenied ? (
+              {location.permissionDenied && (
                 <Button
                   title="Open Settings"
                   variant="secondary"
                   onPress={() => Linking.openSettings()}
+                  className="mb-2"
                 />
-              ) : (
-                <Button title="Try again" variant="secondary" onPress={locate} />
               )}
+              <Button
+                title="Try again"
+                variant={location.permissionDenied ? "ghost" : "secondary"}
+                onPress={locate}
+              />
             </>
           ) : (
             <Button

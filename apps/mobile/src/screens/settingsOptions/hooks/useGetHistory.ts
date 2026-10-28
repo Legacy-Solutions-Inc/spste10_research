@@ -31,11 +31,12 @@ export function useGetHistory(incidentType?: "alert" | "report") {
       return;
     }
 
-    // Get current user
+    // Current user from the stored session (no network round trip)
     const {
-      data: { user },
+      data: { session },
       error: userError,
-    } = await supabase!.auth.getUser();
+    } = await supabase!.auth.getSession();
+    const user = session?.user ?? null;
 
     if (userError || !user) {
       setError("You must be logged in to view your history");

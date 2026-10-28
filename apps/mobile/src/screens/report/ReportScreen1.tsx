@@ -23,10 +23,18 @@ export function ReportScreen1() {
   const [capturing, setCapturing] = useState(false);
   const cameraRef = useRef<CameraView>(null);
   const insets = useSafeAreaInsets();
+  const askedRef = useRef(false);
 
   useEffect(() => {
-    // Ask once on arrival; the fallback below handles a refusal
-    if (permission && !permission.granted && permission.canAskAgain) {
+    // Ask once on arrival. Android can still report canAskAgain after a
+    // refusal, so without this guard it would prompt again immediately
+    if (
+      permission &&
+      !permission.granted &&
+      permission.canAskAgain &&
+      !askedRef.current
+    ) {
+      askedRef.current = true;
       requestPermission();
     }
   }, [permission, requestPermission]);

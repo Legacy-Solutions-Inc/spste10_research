@@ -25,6 +25,8 @@ const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
 interface SosHoldButtonProps {
   onSend: () => void;
+  /** Lets a parent ScrollView stop scrolling, which would steal the touch */
+  onHoldChange?: (holding: boolean) => void;
   disabled?: boolean;
 }
 
@@ -33,13 +35,18 @@ interface SosHoldButtonProps {
  * alerts out of pockets and usability sessions. Screen-reader users get an
  * explicit "Send emergency alert" action instead of the gesture.
  */
-export function SosHoldButton({ onSend, disabled = false }: SosHoldButtonProps) {
+export function SosHoldButton({
+  onSend,
+  onHoldChange,
+  disabled = false,
+}: SosHoldButtonProps) {
   const progress = useSharedValue(0);
   const sentRef = useRef(false);
 
   const complete = () => {
     if (sentRef.current) return;
     sentRef.current = true;
+    onHoldChange?.(false);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     onSend();
     // Reset for when the user comes back to Home
@@ -51,6 +58,7 @@ export function SosHoldButton({ onSend, disabled = false }: SosHoldButtonProps) 
 
   const startHold = () => {
     if (disabled) return;
+    onHoldChange?.(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     progress.value = withTiming(
       1,
@@ -68,6 +76,7 @@ export function SosHoldButton({ onSend, disabled = false }: SosHoldButtonProps) 
 
   const releaseHold = () => {
     if (sentRef.current) return;
+    onHoldChange?.(false);
     cancelAnimation(progress);
     progress.value = withTiming(0, { duration: 200 });
   };

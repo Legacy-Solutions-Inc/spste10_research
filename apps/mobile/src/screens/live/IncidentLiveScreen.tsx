@@ -33,12 +33,15 @@ import {
 } from "@/lib/location";
 import {
   createAlert,
-  attachVictimSnapshot,
+  updateOpenIncident,
   refineIncidentPosition,
+  callEmergencyHotline,
   closeIncident,
+  EMERGENCY_HOTLINE,
   type IncidentKind,
 } from "@/lib/incidents";
 import { getVictimSnapshot, type VictimSnapshot } from "@/lib/profile";
+import { newId } from "@/lib/uuid";
 import colors from "@/theme/colors";
 
 type LiveNavigation = NativeStackNavigationProp<
@@ -155,6 +158,10 @@ export function IncidentLiveScreen() {
   const [closing, setClosing] = useState<null | "completed" | "canceled">(null);
   const sentAtRef = useRef<number | null>(null);
   const sendStartedRef = useRef(false);
+  // One id for every attempt, so "Try again" after a timeout can't duplicate
+  const pendingIdRef = useRef(newId());
+  // Set when the user backs out while we're still locating (nothing sent yet)
+  const abortedRef = useRef(false);
 
   const { incident, error, refresh } = useLiveIncident(kind, incidentId);
   const status = incident?.status;
@@ -169,23 +176,28 @@ export function IncidentLiveScreen() {
   const escalated = waiting && now - sentAt >= ESCALATE_AFTER_MS;
 
   const sendAlert = useCallback(async () => {
+    abortedRef.current = false;
     setSendPhase({ step: "locating" });
     // Loads alongside the location so it never delays the alert
     const snapshotPromise = getVictimSnapshot();
-    let permitted = false;
+    let permissionDenied = false;
     let position: QuickPosition | null = null;
     try {
-      permitted = await ensureLocationPermission();
+      const permitted = await ensureLocationPermission();
+      permissionDenied = !permitted;
       position = permitted ? await getQuickPosition() : null;
     } catch (err) {
+      // A failed check isn't a refusal; offer a retry rather than Settings
       console.log("Location error:", err);
     }
+    if (abortedRef.current) return;
     if (!position) {
-      setSendPhase({ step: "noLocation", permissionDenied: !permitted });
+      setSendPhase({ step: "noLocation", permissionDenied });
       return;
     }
 
     setSendPhase({ step: "sending" });
+    const id = pendingIdRef.current;
     try {
       const readySnapshot = await Promise.race([
         snapshotPromise,
@@ -193,10 +205,10 @@ export function IncidentLiveScreen() {
           setTimeout(() => resolve(null), SNAPSHOT_WAIT_MS)
         ),
       ]);
-      const id = await createAlert(position, readySnapshot);
+      await createAlert(id, position, readySnapshot);
       if (!readySnapshot) {
         snapshotPromise.then((victim: VictimSnapshot | null) => {
-          if (victim) attachVictimSnapshot(id, victim);
+          if (victim) updateOpenIncident("alert", id, { victim });
         });
       }
       sentAtRef.current = Date.now();
@@ -237,13 +249,27 @@ export function IncidentLiveScreen() {
     }
   }, [status, navigation, noun]);
 
-  // Nothing is live yet (or anymore), so back simply goes Home; otherwise
-  // leaving must go through Cancel
+  const goHome = () => navigation.popToTop();
+
+  // Still locating: nothing has been sent, so leaving just stops the send
+  const abortSend = () => {
+    abortedRef.current = true;
+    goHome();
+  };
+
+  // Nothing is live yet (or anymore), so back simply goes Home; while the
+  // insert is in flight or the incident is live, leaving goes through Cancel
   const canLeave =
     sendPhase.step === "noLocation" ||
     sendPhase.step === "failed" ||
     isTerminal(status);
-  useHardwareBack(canLeave ? () => navigation.popToTop() : undefined);
+  useHardwareBack(
+    sendPhase.step === "locating"
+      ? abortSend
+      : canLeave
+        ? goHome
+        : undefined
+  );
 
   const close = async (outcome: "completed" | "canceled", reason?: string) => {
     if (!incidentId) return;
@@ -258,17 +284,21 @@ export function IncidentLiveScreen() {
       }
     } catch (err) {
       setSheet(null);
+      // Back is blocked here, so always offer a way out; the incident stays
+      // open and Home shows it as active
       Alert.alert(
         `Couldn't update your ${noun}`,
-        err instanceof Error ? err.message : "Please try again."
+        err instanceof Error ? err.message : "Please try again.",
+        [
+          { text: "Stay here", style: "cancel" },
+          { text: "Go to Home", onPress: goHome },
+        ]
       );
       refresh();
     } finally {
       setClosing(null);
     }
   };
-
-  const goHome = () => navigation.popToTop();
 
   // ---- Not sent: location or network problems
   if (sendPhase.step === "noLocation") {
@@ -287,21 +317,21 @@ export function IncidentLiveScreen() {
         }
       >
         <CallHotlineButton className="mb-3" />
-        {sendPhase.permissionDenied ? (
+        {sendPhase.permissionDenied && (
           <Button
             title="Open Settings"
             variant="secondary"
             onPress={() => Linking.openSettings()}
             className="mb-2"
           />
-        ) : (
-          <Button
-            title="Try again"
-            variant="secondary"
-            onPress={sendAlert}
-            className="mb-2"
-          />
         )}
+        {/* Also after Settings: coming back should not require a new SOS */}
+        <Button
+          title="Try again"
+          variant={sendPhase.permissionDenied ? "ghost" : "secondary"}
+          onPress={sendAlert}
+          className="mb-2"
+        />
         <Button title="Back to Home" variant="ghost" onPress={goHome} />
       </MessageView>
     );
@@ -509,7 +539,25 @@ export function IncidentLiveScreen() {
 
       <View className="px-6 pb-4">
         {escalated && <CallHotlineButton className="mb-3" />}
-        {!busySending && (
+        {busySending ? (
+          <>
+            {/* A stalled network must never leave the user without a way to get help */}
+            <Button
+              title={`Call ${EMERGENCY_HOTLINE} instead`}
+              variant="ghostInverse"
+              onPress={callEmergencyHotline}
+              icon={<MaterialCommunityIcons name="phone" size={20} color="white" />}
+            />
+            {sendPhase.step === "locating" && (
+              <Button
+                title="Cancel"
+                variant="ghostInverse"
+                onPress={abortSend}
+                className="mt-1"
+              />
+            )}
+          </>
+        ) : (
           <Button
             title={`Cancel ${noun}`}
             variant="ghostInverse"

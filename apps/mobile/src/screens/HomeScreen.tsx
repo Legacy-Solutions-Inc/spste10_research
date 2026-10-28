@@ -21,6 +21,8 @@ export function HomeScreen() {
   const { profileData, refetch: refetchProfile } = useGetProfile();
   const activeIncident = useActiveIncident();
   const [infoMissing, setInfoMissing] = useState(false);
+  // Scrolling while the SOS is held would steal the touch and reset the hold
+  const [holdingSos, setHoldingSos] = useState(false);
 
   // Name, photo and the emergency-info nudge stay current after editing them
   useFocusEffect(
@@ -51,6 +53,7 @@ export function HomeScreen() {
   return (
     <ScrollView
       className="flex-1 bg-white"
+      scrollEnabled={!holdingSos}
       contentContainerStyle={{
         paddingTop: insets.top + 16,
         paddingBottom: insets.bottom + 24,
@@ -160,7 +163,10 @@ export function HomeScreen() {
           and location.
         </Text>
         <View className="mt-6">
-          <SosHoldButton onSend={() => navigation.navigate("AlertLive")} />
+          <SosHoldButton
+            onSend={() => navigation.navigate("AlertLive")}
+            onHoldChange={setHoldingSos}
+          />
         </View>
       </View>
 
