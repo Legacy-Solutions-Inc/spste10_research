@@ -83,7 +83,10 @@ export function useUploadReportImage() {
 
       if (error) {
         console.error("Upload image error:", error);
-        Alert.alert("Error", `Failed to upload image: ${error.message}`);
+        Alert.alert(
+          "Photo didn't upload",
+          "Your report was still sent with your location and details."
+        );
         return null;
       }
 
@@ -97,7 +100,10 @@ export function useUploadReportImage() {
       return imageUrl;
     } catch (error) {
       console.error("Upload image error:", error);
-      Alert.alert("Error", "Failed to upload image. Please try again.");
+      Alert.alert(
+        "Photo didn't upload",
+        "Your report was still sent with your location and details."
+      );
       return null;
     } finally {
       setLoading(false);

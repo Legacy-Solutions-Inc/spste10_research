@@ -19,6 +19,19 @@ export type IncidentStatus =
 
 export const EMERGENCY_HOTLINE = "911";
 
+/** Plain-language status names shown to citizens */
+export const STATUS_LABELS: Record<IncidentStatus, string> = {
+  pending: "Finding a responder",
+  accepted: "Help on the way",
+  completed: "Resolved",
+  canceled: "Canceled",
+  rejected: "Declined",
+};
+
+export function isActiveStatus(status: string) {
+  return status === "pending" || status === "accepted";
+}
+
 export function callEmergencyHotline() {
   Linking.openURL(`tel:${EMERGENCY_HOTLINE}`).catch(() => {
     Alert.alert(

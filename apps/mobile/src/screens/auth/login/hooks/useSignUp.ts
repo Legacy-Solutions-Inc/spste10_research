@@ -53,17 +53,8 @@ export function useSignUp() {
           admit(data.user.id);
           return true;
         } else {
-          // Edge case: no session created (shouldn't happen with email confirmation disabled)
-          Alert.alert(
-            "Account Created",
-            "Your account has been created successfully. Please log in.",
-            [
-              {
-                text: "OK",
-                onPress: () => navigation.navigate("Login2"),
-              },
-            ]
-          );
+          // No session means the project requires email confirmation first
+          navigation.replace("Login5", { email: email.trim() });
           return true;
         }
       }

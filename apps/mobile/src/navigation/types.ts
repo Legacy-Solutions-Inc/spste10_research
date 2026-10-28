@@ -16,19 +16,19 @@ export type RootStackParamList = {
   Report2: { imageUri: string; timestamp: string };
   Report3: { imageUri: string; timestamp: string };
   ReportLive: { id: string };
-  Settings1: undefined;
+  Account: undefined;
   Profile: undefined;
   History: undefined;
   HistoryDetails: {
+    id: string;
+    incidentType: "alert" | "report";
     imageUri: string;
     date: string; // ISO string to avoid serialization issues
     latitude: number;
     longitude: number;
     locationName: string;
     description?: string;
-    status?: string;
-    incidentType?: "alert" | "report";
-    alertId?: string;
+    status: string;
   };
 };
 

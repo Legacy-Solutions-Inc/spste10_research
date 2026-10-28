@@ -14,7 +14,7 @@ import { IncidentLiveScreen } from "./src/screens/live/IncidentLiveScreen";
 import { ReportScreen1 } from "./src/screens/report/ReportScreen1";
 import { ReportScreen2 } from "./src/screens/report/ReportScreen2";
 import { ReportScreen3 } from "./src/screens/report/ReportScreen3";
-import { SettingsScreen1 } from "./src/screens/settingsOptions/SettingsScreen1";
+import { AccountScreen } from "./src/screens/settingsOptions/AccountScreen";
 import { EmergencyInfoScreen } from "./src/screens/onboarding/EmergencyInfoScreen";
 import { LocationPermissionScreen } from "./src/screens/onboarding/LocationPermissionScreen";
 import { HistoryScreen } from "./src/screens/settingsOptions/HistoryScreen";
@@ -73,7 +73,7 @@ function RootNavigator() {
             component={IncidentLiveScreen}
             options={liveScreenOptions}
           />
-          <Stack.Screen name="Settings1" component={SettingsScreen1} />
+          <Stack.Screen name="Account" component={AccountScreen} />
           <Stack.Screen name="Profile" component={EmergencyInfoScreen} />
           <Stack.Screen name="History" component={HistoryScreen} />
           <Stack.Screen

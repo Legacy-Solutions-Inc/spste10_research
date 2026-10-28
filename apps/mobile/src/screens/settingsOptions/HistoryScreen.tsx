@@ -1,191 +1,179 @@
-import { View, Text, ScrollView, Pressable, ActivityIndicator, Image } from "react-native";
-import { useNavigation } from "@react-navigation/native";
+import { useCallback } from "react";
+import {
+  View,
+  Text,
+  ScrollView,
+  Pressable,
+  ActivityIndicator,
+  Image,
+} from "react-native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import type { RootStackParamList } from "@/navigation/types";
-import { useGetHistory } from "./hooks/useGetHistory";
 import { Screen } from "@/components/ui/Screen";
 import { ScreenHeader } from "@/components/ui/ScreenHeader";
+import { Button } from "@/components/ui/Button";
+import { StatusBadge } from "@/components/StatusBadge";
+import { STATUS_LABELS, isActiveStatus, type IncidentStatus } from "@/lib/incidents";
+import colors from "@/theme/colors";
+import { useGetHistory, type HistoryItem } from "./hooks/useGetHistory";
 
 type HistoryNavigation = NativeStackNavigationProp<
   RootStackParamList,
   "History"
 >;
 
+function formatWhen(iso: string) {
+  const date = new Date(iso);
+  const day = date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+  const time = date.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  return `${day} · ${time}`;
+}
+
+function TypeIcon({ item }: { item: HistoryItem }) {
+  if (item.incident_type === "report" && item.image_url) {
+    return (
+      <Image
+        source={{ uri: item.image_url }}
+        className="h-full w-full"
+        resizeMode="cover"
+      />
+    );
+  }
+  const isAlert = item.incident_type === "alert";
+  return (
+    <View
+      className={`h-full w-full items-center justify-center ${
+        isAlert ? "bg-sos-tint" : "bg-navy-tint"
+      }`}
+    >
+      <MaterialCommunityIcons
+        name={isAlert ? "alarm-light" : "camera"}
+        size={30}
+        color={isAlert ? colors.sos.DEFAULT : colors.navy.DEFAULT}
+      />
+    </View>
+  );
+}
+
 export function HistoryScreen() {
   const navigation = useNavigation<HistoryNavigation>();
-  // Fetch both alerts and reports
-  const { historyItems, loading, error } = useGetHistory();
+  const { historyItems, loading, error, refetch } = useGetHistory();
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString("en-US", {
-      month: "long",
-      day: "2-digit",
-      year: "numeric",
-    });
-  };
+  // Statuses change while the user is elsewhere (e.g. a responder resolves one)
+  useFocusEffect(
+    useCallback(() => {
+      refetch();
+      // refetch is recreated every render; focus is the real trigger
+    }, [])
+  );
 
-  const formatTime = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    });
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "accepted":
-        return "bg-green-100 text-green-800";
-      case "pending":
-        return "bg-yellow-100 text-yellow-800";
-      case "completed":
-        return "bg-blue-100 text-blue-800";
-      case "canceled":
-        return "bg-gray-100 text-gray-800";
-      case "rejected":
-        return "bg-red-100 text-red-800";
-      default:
-        return "bg-gray-100 text-gray-800";
+  const openItem = (item: HistoryItem) => {
+    // Open items go back to their live screen rather than a static summary
+    if (isActiveStatus(item.status)) {
+      if (item.incident_type === "alert") {
+        navigation.navigate("AlertLive", { id: item.id });
+      } else {
+        navigation.navigate("ReportLive", { id: item.id });
+      }
+      return;
     }
+    navigation.navigate("HistoryDetails", {
+      id: item.id,
+      incidentType: item.incident_type,
+      imageUri: item.image_url || "",
+      date: item.incident_date,
+      latitude: item.latitude,
+      longitude: item.longitude,
+      locationName: item.location_name || "",
+      description: item.description || "",
+      status: item.status,
+    });
   };
 
   return (
     <Screen edges={["top"]}>
       <ScreenHeader title="History" onBack={() => navigation.goBack()} />
 
-      {/* History List */}
-      <ScrollView className="flex-1">
-        {loading ? (
-          <View className="flex-1 justify-center items-center py-20">
-            <ActivityIndicator size="large" color="#0b376c" />
-            <Text className="mt-4 text-gray-600">Loading history...</Text>
-          </View>
-        ) : error ? (
-          <View className="flex-1 justify-center items-center px-6 py-20">
-            <MaterialCommunityIcons name="alert-circle" size={64} color="#EF4444" />
-            <Text className="mt-4 text-lg font-bold text-gray-900 text-center">
-              Error Loading History
-            </Text>
-            <Text className="mt-2 text-gray-600 text-center">{error}</Text>
-          </View>
-        ) : historyItems.length === 0 ? (
-          <View className="flex-1 justify-center items-center px-6 py-20">
-            <MaterialCommunityIcons name="history" size={64} color="#9CA3AF" />
-            <Text className="mt-4 text-lg font-bold text-gray-900 text-center">
-              No History Yet
-            </Text>
-            <Text className="mt-2 text-gray-600 text-center">
-              Your incident reports will appear here
-            </Text>
-          </View>
-        ) : (
-          historyItems.map((item) => (
-            <Pressable
-              key={item.id}
-              onPress={() =>
-                navigation.navigate("HistoryDetails", {
-                  imageUri: item.image_url || "",
-                  date: item.incident_date, // Pass ISO string
-                  latitude: item.latitude,
-                  longitude: item.longitude,
-                  locationName: item.location_name || "",
-                  description: item.description || "",
-                  status: item.status,
-                  incidentType: item.incident_type,
-                  alertId: item.incident_type === "alert" ? item.id : undefined,
-                })
-              }
-              className="border border-gray-200 rounded-xl mx-4 my-2 bg-white overflow-hidden"
-              style={({ pressed }) => ({
-                opacity: pressed ? 0.7 : 1,
-              })}
-            >
-              <View className="flex-row items-center p-3">
-                {/* Thumbnail Image or Alert Icon */}
-                <View className="w-20 h-20 rounded-lg overflow-hidden mr-3 bg-gray-100 items-center justify-center">
-                  {item.incident_type === "report" && item.image_url ? (
-                    <Image
-                      source={{ uri: item.image_url }}
-                      className="w-full h-full"
-                      resizeMode="cover"
-                    />
-                  ) : (
-                    <View className="w-full h-full items-center justify-center">
-                      {item.incident_type === "alert" ? (
-                        <MaterialCommunityIcons
-                          name="alert-circle"
-                          size={40}
-                          color="#EF4444"
-                        />
-                      ) : (
-                        <MaterialCommunityIcons
-                          name="image-off"
-                          size={32}
-                          color="#9CA3AF"
-                        />
-                      )}
-                    </View>
-                  )}
+      {loading && historyItems.length === 0 ? (
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator size="large" color={colors.navy.DEFAULT} />
+        </View>
+      ) : error ? (
+        <View className="flex-1 items-center justify-center px-8">
+          <MaterialCommunityIcons name="wifi-off" size={56} color={colors.ink.subtle} />
+          <Text className="mt-4 text-center text-lg font-bold text-ink">
+            Couldn't load your history
+          </Text>
+          <Text className="mt-1 text-center text-base text-ink-muted">
+            Check your connection and try again.
+          </Text>
+          <Button
+            title="Try again"
+            variant="secondary"
+            onPress={refetch}
+            className="mt-6 self-stretch"
+          />
+        </View>
+      ) : historyItems.length === 0 ? (
+        <View className="flex-1 items-center justify-center px-8">
+          <MaterialCommunityIcons name="history" size={56} color={colors.ink.subtle} />
+          <Text className="mt-4 text-center text-lg font-bold text-ink">
+            No history yet
+          </Text>
+          <Text className="mt-1 text-center text-base text-ink-muted">
+            Alerts and reports you send will appear here.
+          </Text>
+        </View>
+      ) : (
+        <ScrollView contentContainerStyle={{ paddingVertical: 8 }}>
+          {historyItems.map((item) => {
+            const title =
+              item.incident_type === "alert" ? "Emergency alert" : "Report";
+            const where = item.location_name || "Location shared";
+            const statusLabel =
+              STATUS_LABELS[item.status as IncidentStatus] ?? item.status;
+            return (
+              <Pressable
+                key={`${item.incident_type}-${item.id}`}
+                onPress={() => openItem(item)}
+                accessibilityRole="button"
+                accessibilityLabel={`${title}, ${formatWhen(
+                  item.incident_date
+                )}, ${where}, ${statusLabel}`}
+                className="mx-4 my-1.5 flex-row items-center rounded-2xl border border-line bg-white p-3 active:bg-surface"
+              >
+                <View className="h-16 w-16 overflow-hidden rounded-xl">
+                  <TypeIcon item={item} />
                 </View>
-
-                {/* Details Section */}
-                <View className="flex-1 mr-2">
-                  {/* Incident Type Badge and Date */}
-                  <View className="flex-row items-center mb-1">
-                    <View className={`px-2 py-0.5 rounded mr-2 ${item.incident_type === "alert"
-                        ? "bg-red-100"
-                        : "bg-blue-100"
-                      }`}>
-                      <Text className={`text-xs font-semibold capitalize ${item.incident_type === "alert"
-                          ? "text-red-800"
-                          : "text-blue-800"
-                        }`}>
-                        {item.incident_type}
-                      </Text>
-                    </View>
-                    <Text className="text-base font-bold text-black flex-1">
-                      {formatDate(item.incident_date)}
-                    </Text>
-                  </View>
-                  <Text className="text-xs text-gray-500 mb-1">
-                    {formatTime(item.incident_date)}
+                <View className="ml-3 flex-1">
+                  <Text className="text-base font-bold text-ink">{title}</Text>
+                  <Text className="text-sm text-ink-muted">
+                    {formatWhen(item.incident_date)}
                   </Text>
-
-                  {/* Location */}
-                  {item.location_name && (
-                    <Text className="text-sm text-gray-700 mb-1" numberOfLines={1}>
-                      {item.location_name}
-                    </Text>
-                  )}
-                  <Text className="text-xs text-gray-500 mb-1">
-                    {item.latitude.toFixed(6)}, {item.longitude.toFixed(6)}
+                  <Text className="mb-1.5 text-sm text-ink-muted" numberOfLines={1}>
+                    {where}
                   </Text>
-
-                  {/* Status Badge */}
-                  <View className="self-start mt-1">
-                    <View className={`px-2 py-1 rounded-full ${getStatusColor(item.status)}`}>
-                      <Text className="text-xs font-semibold capitalize">
-                        {item.status}
-                      </Text>
-                    </View>
-                  </View>
+                  <StatusBadge status={item.status} />
                 </View>
-
-                {/* Chevron */}
                 <MaterialCommunityIcons
                   name="chevron-right"
                   size={24}
-                  color="#6B7280"
+                  color={colors.ink.subtle}
                 />
-              </View>
-            </Pressable>
-          ))
-        )}
-      </ScrollView>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      )}
     </Screen>
   );
 }
-
