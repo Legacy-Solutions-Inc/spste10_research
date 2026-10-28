@@ -18,7 +18,7 @@ export default async function DashboardPage() {
   }
 
   // Get user role
-  // @ts-ignore - Supabase types may not be fully generated
+  // @ts-ignore - Supabase types may not be fully generated j
   const { data: profileRaw } = await supabase
     .from("profiles")
     .select("role")
