@@ -1,12 +1,12 @@
+import type { Metadata } from "next";
 import AdminClient from "./AdminClient";
 
-export const metadata = {
-  title: "AGAP - Admin Dashboard",
-  description: "Admin dashboard for managing responder accounts",
+export const metadata: Metadata = {
+  title: "Responder accounts",
+  description: "Review and manage access requests from response offices",
 };
 
-export default async function AdminPage() {
+export default function AdminPage() {
   // Authentication and authorization checks are handled by middleware
   return <AdminClient />;
 }
-

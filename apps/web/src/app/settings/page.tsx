@@ -1,9 +1,24 @@
+import type { Metadata } from "next";
 import { createClient } from "@/lib/supabaseServer";
 import SettingsClient from "./SettingsClient";
+import type { SettingsProfile, UserRole } from "./types";
 
-export const metadata = {
-  title: "AGAP - Settings",
-  description: "Manage your profile and office information",
+export const metadata: Metadata = {
+  title: "Settings",
+  description: "Manage your profile, password, and alert preferences",
+};
+
+type ProfileRow = {
+  full_name: string | null;
+  email: string | null;
+  role: UserRole | null;
+};
+
+type ResponderProfileRow = {
+  municipality: string | null;
+  province: string | null;
+  office_address: string | null;
+  contact_number: string | null;
 };
 
 export default async function SettingsPage() {
@@ -18,65 +33,39 @@ export default async function SettingsPage() {
     return null;
   }
 
-  // Fetch user profile data from profiles table
-  type ProfileData = {
-    id: string;
-    full_name: string | null;
-    email: string | null;
-  } | null;
-
-  type ResponderProfileData = {
-    municipality: string | null;
-    province: string | null;
-    office_address: string | null;
-    contact_number: string | null;
-  } | null;
-
-  let profile: ProfileData = null;
-  try {
-    // @ts-ignore - Supabase types may not be fully generated
-    const { data } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", user.id)
-      .single();
-    profile = data as ProfileData;
-  } catch (error) {
-    console.error("Error fetching profile:", error);
-    profile = null;
+  const { data: profileRaw, error: profileError } = await supabase
+    .from("profiles")
+    .select("full_name, email, role")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (profileError) {
+    console.error("Error fetching profile:", profileError);
   }
+  const profile = profileRaw as ProfileRow | null;
+  const role = profile?.role ?? null;
 
-  // Fetch responder profile data if it exists
-  let responderProfile: ResponderProfileData = null;
-  try {
-    // @ts-ignore - Supabase types may not be fully generated
-    const { data } = await supabase
+  // Only responders have office details; admins never get a responder_profiles row
+  let responder: ResponderProfileRow | null = null;
+  if (role === "responder") {
+    const { data, error } = await supabase
       .from("responder_profiles")
-      .select("*")
+      .select("municipality, province, office_address, contact_number")
       .eq("id", user.id)
-      .single();
-    responderProfile = data as ResponderProfileData;
-  } catch (error) {
-    // Responder profile may not exist - that's okay
-    responderProfile = null;
+      .maybeSingle();
+    if (error) {
+      console.error("Error fetching responder profile:", error);
+    }
+    responder = data as ResponderProfileRow | null;
   }
 
-  // Merge profile and responder profile data
-  const mergedData = {
-    id: profile?.id,
-    full_name: profile?.full_name,
-    email: profile?.email || user.email,
-    municipality: responderProfile?.municipality,
-    province: responderProfile?.province,
-    office_address: responderProfile?.office_address,
-    contact_number: responderProfile?.contact_number,
+  const initialData: SettingsProfile = {
+    full_name: profile?.full_name ?? null,
+    email: profile?.email || user.email || null,
+    municipality: responder?.municipality ?? null,
+    province: responder?.province ?? null,
+    office_address: responder?.office_address ?? null,
+    contact_number: responder?.contact_number ?? null,
   };
 
-  return (
-    <SettingsClient
-      initialData={mergedData}
-      userEmail={user.email || ""}
-    />
-  );
+  return <SettingsClient initialData={initialData} userEmail={user.email || ""} role={role} />;
 }
-
