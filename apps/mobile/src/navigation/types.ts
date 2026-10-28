@@ -7,10 +7,8 @@ export type RootStackParamList = {
   Login4: undefined;
   Login5: { email?: string } | undefined;
   Home: undefined;
-  Alert: undefined;
-  Alert2: { alertId: string };
-  Alert3: { alertId?: string };
-  AlertRejected: undefined;
+  // Without an id the screen sends a new alert; with one it follows it live
+  AlertLive: { id?: string } | undefined;
   Report1: undefined;
   Report2: {
     imageUri: string;

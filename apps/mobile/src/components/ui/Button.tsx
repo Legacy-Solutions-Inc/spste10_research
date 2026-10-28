@@ -2,7 +2,14 @@ import { Pressable, Text, ActivityIndicator, View } from "react-native";
 import type { ReactNode } from "react";
 import colors from "@/theme/colors";
 
-type Variant = "primary" | "secondary" | "destructive" | "ghost";
+type Variant =
+  | "primary"
+  | "secondary"
+  | "destructive"
+  | "ghost"
+  // For navy backgrounds (live alert screens)
+  | "inverse"
+  | "ghostInverse";
 type Size = "md" | "lg";
 
 const containerClass: Record<Variant, string> = {
@@ -10,6 +17,8 @@ const containerClass: Record<Variant, string> = {
   secondary: "bg-white border-2 border-navy active:bg-navy-tint",
   destructive: "bg-sos active:bg-sos-dark",
   ghost: "bg-transparent active:bg-navy-tint",
+  inverse: "bg-white active:bg-navy-tint",
+  ghostInverse: "bg-transparent active:bg-white/10",
 };
 
 const labelClass: Record<Variant, string> = {
@@ -17,6 +26,8 @@ const labelClass: Record<Variant, string> = {
   secondary: "text-navy",
   destructive: "text-white",
   ghost: "text-navy",
+  inverse: "text-navy",
+  ghostInverse: "text-white",
 };
 
 const spinnerColor: Record<Variant, string> = {
@@ -24,6 +35,8 @@ const spinnerColor: Record<Variant, string> = {
   secondary: colors.navy.DEFAULT,
   destructive: "#ffffff",
   ghost: colors.navy.DEFAULT,
+  inverse: colors.navy.DEFAULT,
+  ghostInverse: "#ffffff",
 };
 
 const sizeClass: Record<Size, string> = {

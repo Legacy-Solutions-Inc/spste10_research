@@ -1,10 +1,11 @@
-import { View, Text, ScrollView, Image, TouchableOpacity } from "react-native";
+import { View, Text, ScrollView, Image, TouchableOpacity, Pressable } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import type { RootStackParamList } from "@/navigation/types";
 import { useGetProfile } from "@/screens/settingsOptions/hooks/useGetProfile";
+import { SosHoldButton } from "@/components/SosHoldButton";
 
 type HomeNavigation = NativeStackNavigationProp<RootStackParamList, "Home">;
 
@@ -47,7 +48,7 @@ export function HomeScreen() {
       <View>
        
         {/* Header */}
-        <View className="flex-row items-center justify-between mb-10 px-4">
+        <View className="flex-row items-center justify-between mb-8 px-4">
           <View className="flex-row items-center">
             {/* Avatar */}
             <View className="h-20 w-20 rounded-full bg-gray-200 items-center justify-center mr-4 overflow-hidden">
@@ -87,65 +88,44 @@ export function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Card 1 */}
-        <View className="mt-16 mb-20 px-4">
-          <Text className="text-2xl font-extrabold text-[#0b376c] mb-4">
-            Are you in an emergency?
-          </Text>
-          <Text className="text-md leading-6 text-gray-700 mb-6">
-            Press this button, your live{"\n"}
-            location will be shared to the{"\n"}
-            nearest help centers.
-          </Text>
-
-          <TouchableOpacity
-            activeOpacity={0.8}
-            className="mt-2"
-            onPress={() => navigation.navigate("Alert")}
+        {/* SOS: hold to send */}
+        <View className="items-center px-6">
+          <Text
+            accessibilityRole="header"
+            className="text-center text-2xl font-extrabold text-navy"
           >
-            <View className="relative h-20 justify-center">
-              <View className="absolute left-0 right-0 h-9 bg-gray-300" />
-              <View className="absolute right-6 h-24 w-24 rounded-full bg-[#0b376c] border-[8px] border-gray-200 items-center justify-center">
-                <MaterialCommunityIcons
-                  name="alert-octagon-outline"
-                  size={40}
-                  color="white"
-                />
-              </View>
-            </View>
-          </TouchableOpacity>
+            Need help now?
+          </Text>
+          <Text className="mt-2 text-center text-base leading-6 text-ink-muted">
+            Hold the SOS button for 2 seconds. Responders will get your alert
+            and location.
+          </Text>
+          <View className="mt-6">
+            <SosHoldButton onSend={() => navigation.navigate("AlertLive")} />
+          </View>
         </View>
 
-        {/* Card 2 */}
-        <View className="mb-20 px-4">
-          <Text className="text-2xl font-extrabold text-[#0b376c] mb-4">
-            Did you witness an emergency?
-          </Text>
-          <Text className="text-md leading-6 text-gray-700 mb-6">
-            Press this button, take a photo of the{"\n"}
-            injury, and wait for assistance from{"\n"}
-            the nearest help center. Your live{"\n"}
-            location will be shared.
-          </Text>
-
-          <TouchableOpacity
-            activeOpacity={0.8}
-            className="mt-2"
-            onPress={() => navigation.navigate("Report1")}
-          >
-            <View className="relative h-20 justify-center">
-              <View className="absolute left-0 right-0 h-9 bg-gray-300" />
-              <View className="absolute right-6 h-24 w-24 rounded-full bg-[#0b376c] border-[8px] border-gray-200 items-center justify-center">
-                <MaterialCommunityIcons
-                  name="alert-circle-outline"
-                  size={40}
-                  color="white"
-                />
-              </View>
-            </View>
-          </TouchableOpacity>
-          
-        </View>
+        {/* Report: tap to open the camera */}
+        <Pressable
+          onPress={() => navigation.navigate("Report1")}
+          accessibilityRole="button"
+          accessibilityLabel="Report an emergency"
+          accessibilityHint="Opens the camera so you can send a photo to responders"
+          className="mx-4 mt-10 flex-row items-center rounded-2xl bg-navy p-5 active:bg-navy-dark"
+        >
+          <View className="h-12 w-12 items-center justify-center rounded-full bg-white/15">
+            <MaterialCommunityIcons name="camera" size={26} color="white" />
+          </View>
+          <View className="ml-4 flex-1">
+            <Text className="text-lg font-bold text-white">
+              Report an emergency
+            </Text>
+            <Text className="mt-0.5 text-sm leading-5 text-white/80">
+              Saw someone hurt? Send a photo to responders.
+            </Text>
+          </View>
+          <MaterialCommunityIcons name="chevron-right" size={28} color="white" />
+        </Pressable>
       </View>
     </ScrollView>
   );

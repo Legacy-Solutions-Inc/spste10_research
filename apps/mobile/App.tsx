@@ -10,10 +10,7 @@ import {
   EmailConfirmationScreen,
 } from "./src/screens/auth/login";
 import { HomeScreen } from "./src/screens/HomeScreen";
-import { AlertScreen } from "./src/screens/alert/AlertScreen";
-import { AlertScreen2 } from "./src/screens/alert/AlertScreen2";
-import { AlertScreen3 } from "./src/screens/alert/AlertScreen3";
-import { AlertScreenRejected } from "./src/screens/alert/AlertScreenRejected";
+import { IncidentLiveScreen } from "./src/screens/live/IncidentLiveScreen";
 import { ReportScreen1 } from "./src/screens/report/ReportScreen1";
 import { ReportScreen2 } from "./src/screens/report/ReportScreen2";
 import { ReportScreen3 } from "./src/screens/report/ReportScreen3";
@@ -48,20 +45,9 @@ function RootNavigator() {
       {status === "signedIn" ? (
         <>
           <Stack.Screen name="Home" component={HomeScreen} />
-          <Stack.Screen name="Alert" component={AlertScreen} />
           <Stack.Screen
-            name="Alert2"
-            component={AlertScreen2}
-            options={liveScreenOptions}
-          />
-          <Stack.Screen
-            name="Alert3"
-            component={AlertScreen3}
-            options={liveScreenOptions}
-          />
-          <Stack.Screen
-            name="AlertRejected"
-            component={AlertScreenRejected}
+            name="AlertLive"
+            component={IncidentLiveScreen}
             options={liveScreenOptions}
           />
           <Stack.Screen name="Report1" component={ReportScreen1} />
