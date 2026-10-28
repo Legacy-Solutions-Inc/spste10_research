@@ -8,6 +8,7 @@ import {
   History,
   Settings,
   Users,
+  BarChart3,
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
@@ -25,6 +26,8 @@ interface NavItem {
   name: string;
   path: string;
   icon: LucideIcon;
+  /** Only highlight on this exact path, not its sub-pages */
+  exact?: boolean;
 }
 
 const RESPONDER_NAV: NavItem[] = [
@@ -34,7 +37,8 @@ const RESPONDER_NAV: NavItem[] = [
 ];
 
 const ADMIN_NAV: NavItem[] = [
-  { name: "Responder accounts", path: "/admin", icon: Users },
+  { name: "Responder accounts", path: "/admin", icon: Users, exact: true },
+  { name: "Insights", path: "/admin/insights", icon: BarChart3 },
   { name: "Settings", path: "/settings", icon: Settings },
 ];
 
@@ -112,7 +116,7 @@ export default function Sidebar() {
 
       <nav className={cn("flex-1 space-y-1 overflow-y-auto py-2", collapsed ? "px-2" : "px-3")}>
         {navItems.map((item) => {
-          const isActive = pathname === item.path || pathname.startsWith(`${item.path}/`);
+          const isActive = pathname === item.path || (!item.exact && pathname.startsWith(`${item.path}/`));
           const Icon = item.icon;
           return (
             <RailTooltip key={item.path} label={item.name} collapsed={collapsed}>
