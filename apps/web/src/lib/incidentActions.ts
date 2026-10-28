@@ -108,3 +108,27 @@ export async function resolveIncident(incident: Incident): Promise<void> {
     throw new IncidentUnavailableError(status ?? "canceled");
   }
 }
+
+export interface IncidentClaim {
+  status: IncidentStatus;
+  /** Name of the office that accepted it, if any */
+  acceptedBy: string | null;
+}
+
+/**
+ * What happened to incidents this office was shown: still waiting, accepted by which
+ * office, or closed. Returns an empty map if the database doesn't have
+ * get_incident_claims yet, so callers fall back to a generic message.
+ */
+export async function fetchIncidentClaims(ids: string[]): Promise<Map<string, IncidentClaim>> {
+  const claims = new Map<string, IncidentClaim>();
+  if (!ids.length) return claims;
+  const supabase = createClient();
+  // @ts-ignore - RPC isn't in the generated types
+  const { data, error } = await supabase.rpc("get_incident_claims", { p_ids: ids });
+  if (error || !data) return claims;
+  (data as { incident_id: string; status: IncidentStatus; accepted_by: string | null }[]).forEach((row) => {
+    claims.set(row.incident_id, { status: row.status, acceptedBy: row.accepted_by });
+  });
+  return claims;
+}

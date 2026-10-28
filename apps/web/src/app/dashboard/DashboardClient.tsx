@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import dynamic from "next/dynamic";
 import { Bell, BellOff, BellRing, Volume2, VolumeX } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
@@ -24,7 +24,7 @@ import { useIncidentQueue } from "@/hooks/useIncidentQueue";
 import { useIncidentAlerting } from "@/hooks/useIncidentAlerting";
 import { useResponderLocation } from "@/hooks/useResponderLocation";
 import { useNow } from "@/hooks/useNow";
-import { IncidentUnavailableError, resolveIncident, respondToIncident, undoDecline } from "@/lib/incidentActions";
+import { IncidentUnavailableError, fetchIncidentClaims, resolveIncident, respondToIncident, undoDecline } from "@/lib/incidentActions";
 import { INCIDENT_TYPE_LABEL } from "@/components/incident/IncidentBits";
 import type { Incident } from "@/types/incident";
 
@@ -103,6 +103,51 @@ function AlertControls({
   );
 }
 
+/**
+ * When incidents leave a list without this office acting on them, say what happened:
+ * which office accepted it, or that the citizen canceled or closed it.
+ */
+function useDepartureNotices(
+  items: Incident[],
+  listTab: QueueTab,
+  ownActionIds: MutableRefObject<Set<string>>,
+  closeIfOpen: (ids: string[], listTab: QueueTab) => string | null
+) {
+  const previous = useRef<Map<string, Incident>>(new Map());
+
+  useEffect(() => {
+    const current = new Map(items.map((incident) => [incident.id, incident]));
+    const departed = Array.from(previous.current.values()).filter(
+      (incident) => !current.has(incident.id) && !ownActionIds.current.has(incident.id)
+    );
+    previous.current = current;
+    if (!departed.length) return;
+
+    const openId = closeIfOpen(departed.map((incident) => incident.id), listTab);
+
+    fetchIncidentClaims(departed.map((incident) => incident.id)).then((claims) => {
+      departed.forEach((incident) => {
+        const claim = claims.get(incident.id);
+        const place = placeName(incident);
+        if (listTab === "incoming" && claim?.acceptedBy) {
+          toast({ title: `Accepted by ${claim.acceptedBy}`, description: `${place} left your queue.` });
+        } else if (claim?.status === "canceled") {
+          toast({ title: "Canceled by the citizen", description: `${place} left your ${listTab === "incoming" ? "queue" : "active incidents"}.` });
+        } else if (listTab === "active" && claim?.status === "completed") {
+          toast({ title: "Closed by the citizen", description: `The citizen marked ${place} as resolved.` });
+        } else if (claim?.status === "pending") {
+          // Declined from another tab: other offices can still take it, nothing to report
+        } else if (incident.id === openId) {
+          toast({
+            title: "Incident no longer available",
+            description: listTab === "incoming" ? "Another office accepted it or the citizen canceled it." : "The citizen closed it from their app.",
+          });
+        }
+      });
+    });
+  }, [items, listTab, ownActionIds, closeIfOpen]);
+}
+
 export default function DashboardClient() {
   const now = useNow(1000);
   const office = useResponderLocation();
@@ -148,23 +193,22 @@ export default function DashboardClient() {
     setSelectedId(null);
   };
 
-  // If the open incident leaves the queue for reasons outside this screen
-  // (another office accepted it, the citizen canceled), close it and say why.
-  const previousIds = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    const ids = new Set(list.map((incident) => incident.id));
-    if (selectedId && !ids.has(selectedId) && previousIds.current.has(selectedId)) {
+  // Incidents this screen moved itself (accept/decline/resolve), so they aren't reported as taken elsewhere
+  const ownActionIds = useRef<Set<string>>(new Set());
+  const selectedIdRef = useRef(selectedId);
+  selectedIdRef.current = selectedId;
+  const tabRef = useRef(tab);
+  tabRef.current = tab;
+
+  const closeIfOpen = useCallback((ids: string[], listTab: QueueTab) => {
+    if (tabRef.current === listTab && selectedIdRef.current && ids.includes(selectedIdRef.current)) {
       setSelectedId(null);
-      toast({
-        title: "Incident no longer available",
-        description:
-          tab === "incoming"
-            ? "Another office accepted it or the citizen canceled it."
-            : "The citizen closed it from their app.",
-      });
+      return selectedIdRef.current;
     }
-    previousIds.current = ids;
-  }, [list, selectedId, tab]);
+    return null;
+  }, []);
+  useDepartureNotices(incoming, "incoming", ownActionIds, closeIfOpen);
+  useDepartureNotices(active, "active", ownActionIds, closeIfOpen);
 
   // Escape closes the detail panel (dialogs handle their own Escape)
   useEffect(() => {
@@ -177,10 +221,16 @@ export default function DashboardClient() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  const handleUnavailable = (error: unknown, fallbackTitle: string) => {
+  const handleUnavailable = async (incident: Incident, error: unknown, fallbackTitle: string) => {
     if (error instanceof IncidentUnavailableError) {
-      toast({ title: "Already handled", description: error.message, variant: "error" });
+      ownActionIds.current.add(incident.id);
       setSelectedId(null);
+      const claim = (await fetchIncidentClaims([incident.id])).get(incident.id);
+      toast({
+        title: "Already handled",
+        description: claim?.acceptedBy ? `${claim.acceptedBy} already accepted this incident.` : error.message,
+        variant: "error",
+      });
     } else {
       toast({
         title: fallbackTitle,
@@ -195,6 +245,7 @@ export default function DashboardClient() {
     setBusy({ id: incident.id, action: "accept" });
     try {
       await respondToIncident(incident, "accepted");
+      ownActionIds.current.add(incident.id);
       removeFromIncoming(incident.id);
       setSelectedId(null);
       setFitNonce((n) => n + 1);
@@ -216,7 +267,7 @@ export default function DashboardClient() {
       });
       refetch();
     } catch (error) {
-      handleUnavailable(error, "Couldn't accept this incident");
+      handleUnavailable(incident, error, "Couldn't accept this incident");
     } finally {
       setBusy(null);
     }
@@ -226,6 +277,7 @@ export default function DashboardClient() {
     setBusy({ id: incident.id, action: "decline" });
     try {
       const assignmentId = await respondToIncident(incident, "rejected");
+      ownActionIds.current.add(incident.id);
       removeFromIncoming(incident.id);
       setSelectedId(null);
       setFitNonce((n) => n + 1);
@@ -239,6 +291,7 @@ export default function DashboardClient() {
             onClick={async () => {
               try {
                 await undoDecline(assignmentId);
+                ownActionIds.current.delete(incident.id);
                 toast({ title: "Back in Incoming", description: placeName(incident) });
               } catch (error) {
                 toast({
@@ -256,7 +309,7 @@ export default function DashboardClient() {
       });
       refetch();
     } catch (error) {
-      handleUnavailable(error, "Couldn't decline this incident");
+      handleUnavailable(incident, error, "Couldn't decline this incident");
     } finally {
       setBusy(null);
     }
@@ -267,13 +320,14 @@ export default function DashboardClient() {
     setBusy({ id: incident.id, action: "resolve" });
     try {
       await resolveIncident(incident);
+      ownActionIds.current.add(incident.id);
       removeFromActive(incident.id);
       setSelectedId(null);
       setFitNonce((n) => n + 1);
       toast({ title: "Marked resolved", description: `${placeName(incident)} moved to History.`, variant: "success" });
       refetch();
     } catch (error) {
-      handleUnavailable(error, "Couldn't mark this incident resolved");
+      handleUnavailable(incident, error, "Couldn't mark this incident resolved");
     } finally {
       setBusy(null);
     }
