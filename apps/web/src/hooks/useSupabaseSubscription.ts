@@ -134,6 +134,10 @@ export function useSupabaseSubscription(
           if (status === "SUBSCRIBED") {
             subscribed = true;
             setIsSubscribed(true);
+          } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+            // Report the drop so the UI can show it is relying on polling
+            subscribed = false;
+            setIsSubscribed(false);
           }
         });
 

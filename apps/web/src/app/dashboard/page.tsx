@@ -3,8 +3,8 @@ import { redirect } from "next/navigation";
 import DashboardClient from "./DashboardClient";
 
 export const metadata = {
-  title: "AGAP - Dashboard",
-  description: "AGAP Responder Dashboard",
+  title: "Dashboard",
+  description: "Incoming and active incidents for your response office",
 };
 
 export default async function DashboardPage() {
