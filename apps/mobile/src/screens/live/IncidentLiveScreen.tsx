@@ -23,37 +23,68 @@ import { Button } from "@/components/ui/Button";
 import { StatusTracker, type TrackerStep } from "@/components/StatusTracker";
 import { ConfirmSheet } from "@/components/ConfirmSheet";
 import { PulseRings } from "@/components/PulseRings";
+import { CallHotlineButton } from "@/components/CallHotlineButton";
 import { useLiveIncident, isTerminal } from "@/hooks/useLiveIncident";
 import { useNow } from "@/hooks/useNow";
 import {
   ensureLocationPermission,
   getQuickPosition,
-  getFreshPosition,
-  describeLocation,
-  distanceMeters,
   type QuickPosition,
 } from "@/lib/location";
 import {
   createAlert,
-  refineIncidentLocation,
+  refineIncidentPosition,
   closeIncident,
-  callEmergencyHotline,
-  EMERGENCY_HOTLINE,
   type IncidentKind,
 } from "@/lib/incidents";
 import colors from "@/theme/colors";
 
-type LiveNavigation = NativeStackNavigationProp<RootStackParamList, "AlertLive">;
-type LiveRoute = RouteProp<RootStackParamList, "AlertLive">;
+type LiveNavigation = NativeStackNavigationProp<
+  RootStackParamList,
+  "AlertLive" | "ReportLive"
+>;
+type LiveRoute = RouteProp<RootStackParamList, "AlertLive" | "ReportLive">;
 
 // After this long without a responder, surface the hotline
 const ESCALATE_AFTER_MS = 60000;
-const CANCEL_REASONS = [
-  "Sent by mistake",
-  "Help came another way",
-  "I'm safe now",
-  "Other",
-];
+
+const COPY = {
+  alert: {
+    noun: "alert",
+    Noun: "Alert",
+    icon: "broadcast",
+    sentBody:
+      "Responders near you can see your alert and location. Stay where you are if it's safe.",
+    escalatedBody: "If you're in danger, call 911 now. Your alert stays active.",
+    acceptedBody:
+      "A responder accepted your alert. Stay where you are and keep your phone with you.",
+    completedTitle: "Glad you're safe",
+    cancelReasons: [
+      "Sent by mistake",
+      "Help came another way",
+      "I'm safe now",
+      "Other",
+    ],
+  },
+  report: {
+    noun: "report",
+    Noun: "Report",
+    icon: "camera",
+    sentBody:
+      "Responders near you can see your photo and location. Stay nearby if it's safe.",
+    escalatedBody:
+      "If someone is in danger, call 911 now. Your report stays active.",
+    acceptedBody:
+      "A responder accepted your report. Stay nearby if it's safe and keep your phone with you.",
+    completedTitle: "Thanks for reporting",
+    cancelReasons: [
+      "Sent by mistake",
+      "Help came another way",
+      "The person is safe now",
+      "Other",
+    ],
+  },
+} as const;
 
 type SendPhase =
   | { step: "locating" }
@@ -67,39 +98,6 @@ function formatTime(iso: string | number) {
     hour: "numeric",
     minute: "2-digit",
   });
-}
-
-/** Swap a cached fix for a fresh one if it moved, then attach a place name */
-async function refineLocation(
-  kind: IncidentKind,
-  id: string,
-  first: QuickPosition
-) {
-  let best = { latitude: first.latitude, longitude: first.longitude };
-  if (first.approximate) {
-    const fresh = await getFreshPosition();
-    if (fresh && distanceMeters(best, fresh) > 25) {
-      best = fresh;
-      await refineIncidentLocation(kind, id, fresh);
-    }
-  }
-  const name = await describeLocation(best);
-  if (name) {
-    await refineIncidentLocation(kind, id, { locationName: name });
-  }
-}
-
-function CallHotlineButton({ className = "" }: { className?: string }) {
-  return (
-    <Button
-      title={`Call ${EMERGENCY_HOTLINE}`}
-      variant="destructive"
-      size="lg"
-      onPress={callEmergencyHotline}
-      icon={<MaterialCommunityIcons name="phone" size={20} color="white" />}
-      className={className}
-    />
-  );
 }
 
 /** Full-screen message with an icon and actions (errors and closed states) */
@@ -141,8 +139,9 @@ function MessageView({
 export function IncidentLiveScreen() {
   const navigation = useNavigation<LiveNavigation>();
   const route = useRoute<LiveRoute>();
-  const kind: IncidentKind = "alert";
-  const noun = "alert";
+  const kind: IncidentKind = route.name === "ReportLive" ? "report" : "alert";
+  const copy = COPY[kind];
+  const noun = copy.noun;
 
   const [incidentId, setIncidentId] = useState(route.params?.id);
   const [sendPhase, setSendPhase] = useState<SendPhase>(
@@ -188,7 +187,7 @@ export function IncidentLiveScreen() {
       // Keeps the id if the screen is re-rendered from navigation state
       navigation.setParams({ id });
       setSendPhase({ step: "sent" });
-      refineLocation("alert", id, position);
+      refineIncidentPosition("alert", id, position);
     } catch (err) {
       setSendPhase({
         step: "failed",
@@ -200,11 +199,11 @@ export function IncidentLiveScreen() {
 
   // Arriving from Home's SOS button: send right away
   useEffect(() => {
-    if (!incidentId && !sendStartedRef.current) {
+    if (kind === "alert" && !incidentId && !sendStartedRef.current) {
       sendStartedRef.current = true;
       sendAlert();
     }
-  }, [incidentId, sendAlert]);
+  }, [kind, incidentId, sendAlert]);
 
   // React to status changes from responders
   const previousStatus = useRef(status);
@@ -216,10 +215,10 @@ export function IncidentLiveScreen() {
     } else if (status === "accepted") {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       AccessibilityInfo.announceForAccessibility(
-        "Help is on the way. A responder accepted your alert."
+        `Help is on the way. A responder accepted your ${noun}.`
       );
     }
-  }, [status, navigation]);
+  }, [status, navigation, noun]);
 
   // Nothing is live yet (or anymore), so back simply goes Home; otherwise
   // leaving must go through Cancel
@@ -315,8 +314,8 @@ export function IncidentLiveScreen() {
     return (
       <MessageView
         icon="check-circle"
-        title="Glad you're safe"
-        body="This alert is closed. You can find it later in History."
+        title={copy.completedTitle}
+        body={`This ${noun} is closed. You can find it later in History.`}
       >
         <Button title="Back to Home" size="lg" onPress={goHome} />
       </MessageView>
@@ -327,7 +326,7 @@ export function IncidentLiveScreen() {
     return (
       <MessageView
         icon="account-alert"
-        title="No responder could take this alert"
+        title={`No responder could take this ${noun}`}
         body="If you still need help, call 911 now."
       >
         <CallHotlineButton className="mb-3" />
@@ -345,7 +344,7 @@ export function IncidentLiveScreen() {
 
   const steps: TrackerStep[] = [
     {
-      label: busySending ? "Sending your alert" : "Alert sent",
+      label: busySending ? `Sending your ${noun}` : `${copy.Noun} sent`,
       detail: busySending
         ? sendPhase.step === "locating"
           ? "Getting your location"
@@ -380,7 +379,7 @@ export function IncidentLiveScreen() {
       <Screen>
         <StatusBar style="dark" />
         <ScrollView contentContainerStyle={{ padding: 24 }}>
-          <LivePill tone="light" />
+          <LivePill tone="light" label={`${copy.Noun} is live`} />
           <View className="mt-6 h-20 w-20 items-center justify-center self-center rounded-full bg-navy-tint">
             <MaterialCommunityIcons
               name="account-check"
@@ -395,8 +394,7 @@ export function IncidentLiveScreen() {
             Help is on the way
           </Text>
           <Text className="mt-2 text-center text-base leading-6 text-ink-muted">
-            A responder accepted your alert. Stay where you are and keep your
-            phone with you.
+            {copy.acceptedBody}
           </Text>
           <View className="mt-6 rounded-2xl border border-line">
             <StatusTracker steps={steps} />
@@ -425,9 +423,9 @@ export function IncidentLiveScreen() {
         </View>
         <ConfirmSheet
           visible={sheet === "noLongerNeeded"}
-          title="Close this alert?"
+          title={`Close this ${noun}?`}
           message="The responder will see that you no longer need help."
-          reasons={CANCEL_REASONS}
+          reasons={[...copy.cancelReasons]}
           keepLabel="Keep it open"
           confirmLabel="I no longer need help"
           confirming={closing === "canceled"}
@@ -439,26 +437,28 @@ export function IncidentLiveScreen() {
   }
 
   const title = busySending
-    ? "Sending alert…"
+    ? `Sending ${noun}…`
     : escalated
       ? "Still finding a responder…"
-      : "Alert sent";
+      : `${copy.Noun} sent`;
   const subtitle = busySending
     ? "This only takes a few seconds."
     : escalated
-      ? "If you're in danger, call 911 now. Your alert stays active."
-      : "Responders near you can see your alert and location. Stay where you are if it's safe.";
+      ? copy.escalatedBody
+      : copy.sentBody;
 
   return (
     <Screen className="bg-navy">
       <StatusBar style="light" />
       <ScrollView contentContainerStyle={{ padding: 24 }}>
-        {!busySending && <LivePill tone="dark" />}
+        {!busySending && (
+          <LivePill tone="dark" label={`${copy.Noun} is live`} />
+        )}
         <View className="my-4 items-center">
           <PulseRings size={96}>
             <View className="h-24 w-24 items-center justify-center rounded-full bg-white/15">
               <MaterialCommunityIcons
-                name="broadcast"
+                name={copy.icon}
                 size={48}
                 color="white"
               />
@@ -494,7 +494,7 @@ export function IncidentLiveScreen() {
         {escalated && <CallHotlineButton className="mb-3" />}
         {!busySending && (
           <Button
-            title="Cancel alert"
+            title={`Cancel ${noun}`}
             variant="ghostInverse"
             onPress={() => setSheet("cancel")}
           />
@@ -503,11 +503,15 @@ export function IncidentLiveScreen() {
 
       <ConfirmSheet
         visible={sheet === "cancel"}
-        title="Cancel this alert?"
-        message="Responders will stop looking for you."
-        reasons={CANCEL_REASONS}
-        keepLabel="Keep alert active"
-        confirmLabel="Cancel alert"
+        title={`Cancel this ${noun}?`}
+        message={
+          kind === "alert"
+            ? "Responders will stop looking for you."
+            : "Responders will stop responding to this report."
+        }
+        reasons={[...copy.cancelReasons]}
+        keepLabel={`Keep ${noun} active`}
+        confirmLabel={`Cancel ${noun}`}
         confirming={closing === "canceled"}
         onConfirm={(reason) => close("canceled", reason)}
         onKeep={() => setSheet(null)}
@@ -516,14 +520,14 @@ export function IncidentLiveScreen() {
   );
 }
 
-function LivePill({ tone }: { tone: "dark" | "light" }) {
+function LivePill({ tone, label }: { tone: "dark" | "light"; label: string }) {
   return (
     <View
       className={`flex-row items-center self-center rounded-full px-3 py-1 ${
         tone === "dark" ? "bg-white/10" : "bg-sos-tint"
       }`}
       accessible
-      accessibilityLabel="Alert is live"
+      accessibilityLabel={label}
     >
       <View className="h-2.5 w-2.5 rounded-full bg-sos" />
       <Text

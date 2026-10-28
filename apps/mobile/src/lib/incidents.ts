@@ -1,6 +1,12 @@
 import { Alert, Linking } from "react-native";
 import { supabase } from "@/lib/supabase";
-import type { Coords } from "@/lib/location";
+import {
+  describeLocation,
+  distanceMeters,
+  getFreshPosition,
+  type Coords,
+  type QuickPosition,
+} from "@/lib/location";
 
 export type IncidentKind = "alert" | "report";
 export type IncidentStatus =
@@ -60,6 +66,62 @@ export async function createAlert(
   return data.id as string;
 }
 
+interface NewReport {
+  coords: Coords;
+  locationName?: string;
+  /** AI description; null when analysis hasn't finished or failed */
+  description: string | null;
+  /** The reporter's own chips and note, kept separate from the AI text */
+  userNote: string | null;
+}
+
+/** Creates a pending report (photo attached afterwards) and returns its id */
+export async function createReport(report: NewReport): Promise<string> {
+  const client = requireClient();
+  const {
+    data: { user },
+  } = await client.auth.getUser();
+  if (!user) {
+    throw new Error("You're signed out. Log in again to send a report.");
+  }
+
+  const { data, error } = await client
+    .from("reports")
+    .insert({
+      user_id: user.id,
+      latitude: report.coords.latitude,
+      longitude: report.coords.longitude,
+      location_name: report.locationName ?? null,
+      description: report.description,
+      user_note: report.userNote,
+      status: "pending",
+    })
+    .select("id")
+    .single();
+
+  if (error || !data) {
+    console.error("Create report error:", error);
+    throw new Error("Your report didn't go through. Check your connection.");
+  }
+  return data.id as string;
+}
+
+/** Best-effort update of a still-pending report (photo path, late AI text) */
+export async function updatePendingReport(
+  id: string,
+  fields: { image_url?: string; description?: string }
+) {
+  const client = requireClient();
+  const { error } = await client
+    .from("reports")
+    .update(fields)
+    .eq("id", id)
+    .eq("status", "pending");
+  if (error) {
+    console.error("Report update failed:", error.message);
+  }
+}
+
 /**
  * Updates the position of a still-pending incident once a better fix or a place
  * name is available. Best effort: once a responder has accepted, RLS stops the
@@ -84,6 +146,30 @@ export async function refineIncidentLocation(
     .eq("status", "pending");
   if (error) {
     console.log("Location refine skipped:", error.message);
+  }
+}
+
+/** Swap a cached fix for a fresh one if it moved, then attach a place name */
+export async function refineIncidentPosition(
+  kind: IncidentKind,
+  id: string,
+  first: QuickPosition,
+  knownLocationName?: string
+) {
+  let best: Coords = { latitude: first.latitude, longitude: first.longitude };
+  let moved = false;
+  if (first.approximate) {
+    const fresh = await getFreshPosition();
+    if (fresh && distanceMeters(best, fresh) > 25) {
+      best = fresh;
+      moved = true;
+      await refineIncidentLocation(kind, id, fresh);
+    }
+  }
+  if (knownLocationName && !moved) return;
+  const name = await describeLocation(best);
+  if (name) {
+    await refineIncidentLocation(kind, id, { locationName: name });
   }
 }
 

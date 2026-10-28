@@ -10,24 +10,10 @@ export type RootStackParamList = {
   // Without an id the screen sends a new alert; with one it follows it live
   AlertLive: { id?: string } | undefined;
   Report1: undefined;
-  Report2: {
-    imageUri: string;
-    latitude: number;
-    longitude: number;
-    timestamp: string; // ISO string to avoid non-serializable warning
-    locationName?: string;
-  };
-  Report3: {
-    imageUri: string;
-    latitude: number;
-    longitude: number;
-    timestamp: string; // ISO string to avoid non-serializable warning
-    locationName?: string;
-    aiDescription?: string; // AI-generated description of the emergency photo
-  };
-  Report4: { reportId: string };
-  Report5: { reportId?: string };
-  ReportRejected: undefined;
+  // Location is resolved on the review screen, not at capture
+  Report2: { imageUri: string; timestamp: string };
+  Report3: { imageUri: string; timestamp: string };
+  ReportLive: { id: string };
   Settings1: undefined;
   Profile: undefined;
   History: undefined;

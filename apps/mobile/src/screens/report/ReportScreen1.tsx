@@ -1,13 +1,16 @@
-import { View, Text, TouchableOpacity, StyleSheet, Alert } from "react-native";
+import { View, Text, Pressable, StyleSheet, Alert, Linking } from "react-native";
 import { useState, useEffect, useRef } from "react";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { CameraView, CameraType, useCameraPermissions } from "expo-camera";
-import * as Location from "expo-location";
+import { CameraView, useCameraPermissions } from "expo-camera";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { RootStackParamList } from "@/navigation/types";
+import { Screen } from "@/components/ui/Screen";
+import { ScreenHeader } from "@/components/ui/ScreenHeader";
+import { Button } from "@/components/ui/Button";
+import colors from "@/theme/colors";
 
 type Report1Navigation = NativeStackNavigationProp<
   RootStackParamList,
@@ -16,194 +19,136 @@ type Report1Navigation = NativeStackNavigationProp<
 
 export function ReportScreen1() {
   const navigation = useNavigation<Report1Navigation>();
-  const [facing, setFacing] = useState<CameraType>("back");
   const [permission, requestPermission] = useCameraPermissions();
-  const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [capturing, setCapturing] = useState(false);
   const cameraRef = useRef<CameraView>(null);
   const insets = useSafeAreaInsets();
 
   useEffect(() => {
-    // Request camera permission on mount
-    if (permission && !permission.granted) {
+    // Ask once on arrival; the fallback below handles a refusal
+    if (permission && !permission.granted && permission.canAskAgain) {
       requestPermission();
     }
   }, [permission, requestPermission]);
 
+  // Location is resolved on the review screen, so the shutter fires instantly
   const takePicture = async () => {
-    if (!cameraRef.current) {
-      return;
-    }
-
+    if (!cameraRef.current || capturing) return;
+    setCapturing(true);
     try {
-      // Get current location
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      let latitude = 0;
-      let longitude = 0;
-      let locationName: string | undefined;
-
-      if (status === "granted") {
-        try {
-          const location = await Location.getCurrentPositionAsync({});
-          latitude = location.coords.latitude;
-          longitude = location.coords.longitude;
-
-          // Reverse geocode to get location name
-          try {
-            const reverseGeocode = await Location.reverseGeocodeAsync({
-              latitude,
-              longitude,
-            });
-            if (reverseGeocode.length > 0) {
-              const addr = reverseGeocode[0];
-              locationName = `${addr.street || ""} ${addr.city || ""} ${addr.region || ""}`.trim();
-            }
-          } catch (e) {
-            console.log("Reverse geocoding failed:", e);
-          }
-        } catch (e) {
-          console.log("Location fetch failed:", e);
-        }
-      }
-
       const photo = await cameraRef.current.takePictureAsync({
         quality: 0.8,
         base64: false,
       });
-
       if (photo?.uri) {
-        setCapturedImage(photo.uri);
-        const timestamp = new Date();
-        // Navigate to next screen with image URI and location data
-        // Convert Date to ISO string for navigation (non-serializable warning)
         navigation.navigate("Report2", {
           imageUri: photo.uri,
-          latitude,
-          longitude,
-          timestamp: timestamp.toISOString(),
-          locationName,
+          timestamp: new Date().toISOString(),
         });
       }
     } catch (error) {
       console.error("Error taking picture:", error);
-      Alert.alert("Error", "Failed to capture photo");
+      Alert.alert("Couldn't take the photo", "Please try again.");
+    } finally {
+      setCapturing(false);
     }
   };
 
-  // Permission denied fallback UI
-  if (permission && !permission.granted) {
+  if (!permission) {
     return (
-      <View className="flex-1 bg-white px-6" style={{ paddingTop: insets.top + 16 }}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          className="mb-6 w-12 h-12 rounded-full bg-white items-center justify-center"
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          activeOpacity={0.7}
-        >
-          <MaterialCommunityIcons name="arrow-left" size={28} color="#0b376c" />
-        </TouchableOpacity>
-
-        <View className="flex-1 justify-center items-center">
-          <Text className="text-xl font-bold text-blue-900 text-center mb-4">
-            Camera Permission Required
-          </Text>
-          <Text className="text-base text-gray-700 text-center mb-8 px-4">
-            Please grant camera permission to take a photo of the injury.
-          </Text>
-          <TouchableOpacity
-            onPress={requestPermission}
-            className="bg-blue-900 px-6 py-3 rounded-full"
-          >
-            <Text className="text-white font-bold text-base">
-              Grant Permission
-            </Text>
-          </TouchableOpacity>
-        </View>
+      <View className="flex-1 items-center justify-center bg-black">
+        <Text className="text-base text-white/80">Opening camera…</Text>
       </View>
     );
   }
 
-  // Loading state while checking permissions
-  if (!permission) {
+  if (!permission.granted) {
     return (
-      <View className="flex-1 bg-white justify-center items-center">
-        <Text className="text-lg text-gray-700">Loading camera...</Text>
-      </View>
+      <Screen>
+        <ScreenHeader title="Report" onBack={() => navigation.goBack()} />
+        <View className="flex-1 items-center justify-center px-8">
+          <View className="h-24 w-24 items-center justify-center rounded-full bg-navy-tint">
+            <MaterialCommunityIcons
+              name="camera-off"
+              size={48}
+              color={colors.navy.DEFAULT}
+            />
+          </View>
+          <Text
+            accessibilityRole="header"
+            className="mt-6 text-center text-2xl font-bold text-ink"
+          >
+            Camera access needed
+          </Text>
+          <Text className="mt-2 text-center text-base leading-6 text-ink-muted">
+            A photo helps responders see what happened before they arrive.
+          </Text>
+        </View>
+        <View className="px-6 pb-4">
+          {permission.canAskAgain ? (
+            <Button title="Allow camera" size="lg" onPress={requestPermission} />
+          ) : (
+            <Button
+              title="Open Settings"
+              size="lg"
+              onPress={() => Linking.openSettings()}
+            />
+          )}
+        </View>
+      </Screen>
     );
   }
 
   return (
     <View className="flex-1 bg-black">
       <StatusBar style="light" />
-      {/* Top section with back button and instruction */}
+      <CameraView
+        ref={cameraRef}
+        style={StyleSheet.absoluteFillObject}
+        facing="back"
+      />
+
+      {/* Top: back + framing tip */}
       <View
-        className="absolute left-4 right-4 z-10"
+        className="absolute left-4 right-4 flex-row items-center"
         style={{ top: insets.top + 8 }}
       >
-        <TouchableOpacity
+        <Pressable
           onPress={() => navigation.goBack()}
-          className="mb-4 w-12 h-12 rounded-full bg-white items-center justify-center"
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          hitSlop={8}
+          className="h-12 w-12 items-center justify-center rounded-full bg-white active:bg-navy-tint"
         >
-          <MaterialCommunityIcons name="arrow-left" size={28} color="#0b376c" />
-        </TouchableOpacity>
-
-        {/* Instruction text */}
-        <View className="flex-row items-start">
-          <View className="w-1 h-6 bg-blue-900 mr-3 mt-1" />
-          <Text className="text-sm italic text-blue-800 flex-1">
-            Please ensure that the entire injury site is clearly visible in the
-            image
+          <MaterialCommunityIcons
+            name="arrow-left"
+            size={26}
+            color={colors.navy.DEFAULT}
+          />
+        </Pressable>
+        <View className="ml-3 flex-1 rounded-2xl bg-black/60 px-4 py-2">
+          <Text className="text-sm leading-5 text-white">
+            Fit the whole injury or scene in the frame.
           </Text>
         </View>
       </View>
 
-      {/* Camera preview */}
-      <View className="flex-1 relative">
-        <CameraView
-          ref={cameraRef}
-          style={StyleSheet.absoluteFillObject}
-          facing={facing}
-        />
-        
-        {/* Grid overlay - 3x3 rule of thirds */}
-        <View className="absolute inset-0 pointer-events-none">
-          {/* Vertical lines */}
-          <View 
-            className="absolute top-0 bottom-0 w-px bg-white/50"
-            style={{ left: "33.33%" }}
-          />
-          <View 
-            className="absolute top-0 bottom-0 w-px bg-white/50"
-            style={{ left: "66.66%" }}
-          />
-
-          {/* Horizontal lines */}
-          <View 
-            className="absolute left-0 right-0 h-px bg-white/50"
-            style={{ top: "33.33%" }}
-          />
-          <View 
-            className="absolute left-0 right-0 h-px bg-white/50"
-            style={{ top: "66.66%" }}
-          />
-        </View>
-      </View>
-
-      {/* Camera shutter button at bottom */}
+      {/* Shutter */}
       <View
         className="absolute left-0 right-0 items-center"
         style={{ bottom: insets.bottom + 32 }}
       >
-        <TouchableOpacity
+        <Pressable
           onPress={takePicture}
-          className="h-16 w-16 rounded-full bg-blue-900 items-center justify-center"
-          activeOpacity={0.8}
+          disabled={capturing}
+          accessibilityRole="button"
+          accessibilityLabel="Take photo"
+          accessibilityState={{ disabled: capturing, busy: capturing }}
+          className="h-20 w-20 items-center justify-center rounded-full border-4 border-white bg-white/30 active:bg-white/60"
         >
-          <MaterialCommunityIcons name="camera" size={32} color="white" />
-        </TouchableOpacity>
+          <View className="h-14 w-14 rounded-full bg-white" />
+        </Pressable>
       </View>
     </View>
   );
 }
-

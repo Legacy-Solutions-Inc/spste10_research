@@ -1,11 +1,40 @@
-import { View, Text, TouchableOpacity, Image, StyleSheet, ScrollView, ActivityIndicator } from "react-native";
-import { useState } from "react";
-import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import {
+  View,
+  Text,
+  Image,
+  ScrollView,
+  TextInput,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Alert,
+  Linking,
+} from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import type { RootStackParamList } from "@/navigation/types";
+import { Screen } from "@/components/ui/Screen";
+import { ScreenHeader } from "@/components/ui/ScreenHeader";
+import { Button } from "@/components/ui/Button";
+import { Chip } from "@/components/ui/Chip";
+import { CallHotlineButton } from "@/components/CallHotlineButton";
+import {
+  ensureLocationPermission,
+  getQuickPosition,
+  describeLocation,
+  type QuickPosition,
+} from "@/lib/location";
+import {
+  createReport,
+  updatePendingReport,
+  refineIncidentPosition,
+} from "@/lib/incidents";
+import colors from "@/theme/colors";
 import { useUploadReportImage } from "./hooks/useUploadReportImage";
-import { useCreateReport } from "./hooks/useCreateReport";
+import { useAnalyzePhoto } from "./hooks/useAnalyzePhoto";
 
 type Report3Navigation = NativeStackNavigationProp<
   RootStackParamList,
@@ -13,207 +42,282 @@ type Report3Navigation = NativeStackNavigationProp<
 >;
 type Report3RouteProp = RouteProp<RootStackParamList, "Report3">;
 
+const DETAIL_CHIPS = [
+  "Unconscious",
+  "Heavy bleeding",
+  "Not breathing",
+  "Vehicle accident",
+  "Fire",
+];
+const NOTE_MAX = 200;
+
+type Analysis =
+  | { state: "running" }
+  | { state: "done"; text: string }
+  | { state: "unavailable" };
+
+type LocationState =
+  | { state: "locating" }
+  | { state: "found"; position: QuickPosition; name?: string }
+  | { state: "missing"; permissionDenied: boolean };
+
 export function ReportScreen3() {
   const navigation = useNavigation<Report3Navigation>();
   const route = useRoute<Report3RouteProp>();
-  const { imageUri, latitude, longitude, timestamp: timestampString, locationName, aiDescription } = route.params;
-  const [isSending, setIsSending] = useState(false);
+  const { imageUri, timestamp } = route.params;
   const insets = useSafeAreaInsets();
+  const { analyzePhoto } = useAnalyzePhoto();
+  const { uploadImage } = useUploadReportImage();
 
-  // Drop the camera/review screens so the live screen sits directly on Home
-  const goToLiveReport = (reportId: string) => {
-    navigation.reset({
-      index: 1,
-      routes: [{ name: "Home" }, { name: "Report4", params: { reportId } }],
+  const [analysis, setAnalysis] = useState<Analysis>({ state: "running" });
+  const analysisRef = useRef<Promise<string | null> | null>(null);
+  const [location, setLocation] = useState<LocationState>({
+    state: "locating",
+  });
+  const [chips, setChips] = useState<string[]>([]);
+  const [note, setNote] = useState("");
+  const [sending, setSending] = useState(false);
+
+  // The AI description is generated in the background and never blocks Send
+  useEffect(() => {
+    if (analysisRef.current) return;
+    const promise = analyzePhoto(imageUri).catch(() => null);
+    analysisRef.current = promise;
+    let active = true;
+    promise.then((text) => {
+      if (!active) return;
+      setAnalysis(text ? { state: "done", text } : { state: "unavailable" });
     });
-  };
-  
-  // Convert timestamp string back to Date
-  const timestamp = new Date(timestampString);
-  
-  const { uploadImage, loading: uploadLoading } = useUploadReportImage();
-  const { createReport, loading: createLoading } = useCreateReport();
+    return () => {
+      active = false;
+    };
+  }, [imageUri, analyzePhoto]);
 
-  // Format date and time
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString("en-US", {
-      month: "long",
-      day: "numeric",
-      year: "numeric",
-    });
+  const locate = useCallback(async () => {
+    setLocation({ state: "locating" });
+    let permitted = false;
+    let position: QuickPosition | null = null;
+    try {
+      permitted = await ensureLocationPermission();
+      position = permitted ? await getQuickPosition() : null;
+    } catch (err) {
+      console.log("Location error:", err);
+    }
+    if (!position) {
+      setLocation({ state: "missing", permissionDenied: !permitted });
+      return;
+    }
+    setLocation({ state: "found", position });
+    const name = await describeLocation(position);
+    if (name) {
+      setLocation((current) =>
+        current.state === "found" ? { ...current, name } : current
+      );
+    }
+  }, []);
+
+  useEffect(() => {
+    locate();
+  }, [locate]);
+
+  const toggleChip = (chip: string) => {
+    setChips((current) =>
+      current.includes(chip)
+        ? current.filter((c) => c !== chip)
+        : [...current, chip]
+    );
   };
 
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    });
-  };
+  const send = async () => {
+    if (location.state !== "found" || sending) return;
+    setSending(true);
 
-  const formatTimestamp = (date: Date) => {
-    return date.toLocaleDateString("en-US", {
-      month: "2-digit",
-      day: "2-digit",
-      year: "2-digit",
-    }) + " " + formatTime(date);
-  };
-
-  const handleSend = async () => {
-    setIsSending(true);
+    const aiText = analysis.state === "done" ? analysis.text : null;
+    const userNote =
+      [chips.join(", "), note.trim()].filter(Boolean).join("\n") || null;
 
     try {
-      // Create report first without image URL (we'll update it after upload)
-      const tempReportData = await createReport({
-        latitude,
-        longitude,
-        locationName,
-        imageUrl: "", // Temporary, will update after upload
-        description: description,
+      const id = await createReport({
+        coords: location.position,
+        locationName: location.name,
+        description: aiText,
+        userNote,
       });
 
-      if (!tempReportData) {
-        setIsSending(false);
-        return;
+      const imagePath = await uploadImage(imageUri, id);
+      if (imagePath) {
+        await updatePendingReport(id, { image_url: imagePath });
       }
 
-      // Upload image with report ID
-      const imageUrl = await uploadImage(imageUri, tempReportData.id);
-
-      if (!imageUrl) {
-        // If upload fails, navigate anyway - the report exists without image
-        // In production, you might want to delete the report or show an error
-        goToLiveReport(tempReportData.id);
-        setIsSending(false);
-        return;
+      // Attach the AI text whenever it finishes, even after this screen is gone
+      if (!aiText && analysis.state === "running") {
+        analysisRef.current?.then((text) => {
+          if (text) updatePendingReport(id, { description: text });
+        });
       }
+      refineIncidentPosition("report", id, location.position, location.name);
 
-      // Update report with image URL
-      const { supabase, isSupabaseConfigured } = await import("@/lib/supabase");
-      if (isSupabaseConfigured()) {
-        const { error: updateError } = await supabase!
-          .from("reports")
-          .update({ image_url: imageUrl })
-          .eq("id", tempReportData.id);
-
-        if (updateError) {
-          console.error("Failed to update report with image URL:", updateError);
-          // Continue anyway - report exists
-        }
-      }
-      
-      // Navigate to ReportScreen4 with report ID
-      goToLiveReport(tempReportData.id);
-    } catch (error) {
-      console.error("Error sending report:", error);
-      setIsSending(false);
+      // The live screen sits directly on Home; camera/review screens are dropped
+      navigation.reset({
+        index: 1,
+        routes: [{ name: "Home" }, { name: "ReportLive", params: { id } }],
+      });
+    } catch (err) {
+      setSending(false);
+      Alert.alert(
+        "Your report wasn't sent",
+        `${
+          err instanceof Error ? err.message : "Please try again."
+        } If someone is in danger, call 911.`
+      );
     }
   };
 
-  // Use AI-generated description or fallback
-  const description = aiDescription || "Emergency photo submitted. Description not available.";
+  const locationLabel =
+    location.state === "locating"
+      ? "Finding your location…"
+      : location.state === "missing"
+        ? "Location unavailable"
+        : location.name ||
+          `${location.position.latitude.toFixed(5)}, ${location.position.longitude.toFixed(5)}`;
 
   return (
-    <ScrollView
-      className="flex-1 bg-white"
-      contentContainerStyle={{
-        paddingTop: insets.top + 16,
-        paddingBottom: insets.bottom,
-      }}
-    >
-      {/* Title */}
-      <Text className="text-2xl font-bold text-blue-900 text-center">
-        Report
-      </Text>
-
-      {/* Report Card */}
-      <View className="mx-4 mt-4 mb-6 rounded-2xl border-2 border-blue-200 overflow-hidden">
-        {/* Top Row Metadata */}
-        <View className="flex-row justify-between px-4 mt-4">
-          {/* Left side - Latitude and Longitude */}
-          <View>
-            <Text className="text-xs font-semibold text-blue-900">
-              Latitude {latitude.toFixed(6)}°
-            </Text>
-            <Text className="text-xs font-semibold text-blue-900 mt-1">
-              Longitude {longitude.toFixed(6)}°
-            </Text>
-          </View>
-
-          {/* Right side - Date and Time */}
-          <View className="items-end">
-            <Text className="text-xs font-semibold text-blue-900">
-              {formatDate(timestamp)}
-            </Text>
-            <Text className="text-xs font-semibold text-blue-900 mt-1">
-              {formatTime(timestamp)}
-            </Text>
-          </View>
-        </View>
-
-        {/* Image Block */}
-        <View className="relative mx-4 mt-4 rounded-xl overflow-hidden">
+    <Screen edges={["top"]}>
+      <ScreenHeader title="Review report" onBack={() => navigation.goBack()} />
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        className="flex-1"
+      >
+        <ScrollView
+          className="flex-1"
+          contentContainerStyle={{ padding: 16, paddingBottom: 24 }}
+          keyboardShouldPersistTaps="handled"
+        >
           <Image
             source={{ uri: imageUri }}
-            style={{ width: "100%", height: 300 }}
+            style={{ width: "100%", height: 220, borderRadius: 16 }}
             resizeMode="cover"
+            accessibilityLabel="Your photo"
           />
-
-          {/* Map overlay info tag - bottom left */}
-          {locationName && (
-            <View className="absolute bottom-2 left-2 bg-white/80 rounded p-2 max-w-[60%]">
-              <Text className="text-[10px] text-blue-900 font-semibold">
-                {locationName}
-              </Text>
-              <Text className="text-[10px] text-blue-900 mt-0.5">
-                Latitude {latitude.toFixed(6)}°
-              </Text>
-              <Text className="text-[10px] text-blue-900">
-                Longitude {longitude.toFixed(6)}°
-              </Text>
-              <Text className="text-[10px] text-blue-900 mt-0.5">
-                {formatTimestamp(timestamp)}
-              </Text>
-            </View>
-          )}
-        </View>
-
-        {/* Location Label */}
-        {locationName && (
-          <Text className="text-sm font-semibold text-blue-900 text-center mt-2 mx-4">
-            {locationName}
-          </Text>
-        )}
-
-        {/* AI-Generated Description Box */}
-        <View className="border border-blue-900 rounded-xl p-4 mt-3 mx-4 mb-4">
-          <ScrollView nestedScrollEnabled>
-            <Text className="text-sm text-gray-800 leading-5">
-              {description}
+          <View className="mt-3 flex-row items-center">
+            <MaterialCommunityIcons
+              name="map-marker"
+              size={18}
+              color={colors.navy.DEFAULT}
+            />
+            <Text className="ml-1 flex-1 text-sm text-ink-muted" numberOfLines={1}>
+              {locationLabel}
             </Text>
-          </ScrollView>
-        </View>
-      </View>
+            <Text className="ml-2 text-sm text-ink-subtle">
+              {new Date(timestamp).toLocaleTimeString("en-US", {
+                hour: "numeric",
+                minute: "2-digit",
+              })}
+            </Text>
+          </View>
 
-      {/* Send Button */}
-      <View className="items-center mb-8">
-        <TouchableOpacity
-          onPress={handleSend}
-          disabled={isSending || uploadLoading || createLoading}
-          className="bg-blue-900 rounded-full py-3 px-10 shadow-lg"
-          activeOpacity={0.8}
-        >
-          {isSending || uploadLoading || createLoading ? (
-            <View className="flex-row items-center">
-              <ActivityIndicator size="small" color="white" />
-              <Text className="text-white font-bold text-base ml-2">Sending...</Text>
-            </View>
+          {/* AI description: read-only so its output stays exactly as generated */}
+          <Text
+            accessibilityRole="header"
+            className="mt-6 text-base font-bold text-ink"
+          >
+            AI description
+          </Text>
+          <Text className="mt-0.5 text-sm text-ink-subtle">
+            Written automatically from your photo. Responders see it as-is.
+          </Text>
+          <View
+            className="mt-2 min-h-[88px] justify-center rounded-2xl bg-surface p-4"
+            accessibilityLiveRegion="polite"
+          >
+            {analysis.state === "running" && (
+              <View className="flex-row items-center">
+                <ActivityIndicator size="small" color={colors.navy.DEFAULT} />
+                <Text className="ml-3 flex-1 text-sm leading-5 text-ink-muted">
+                  Analyzing your photo… You can send now; the description will
+                  follow.
+                </Text>
+              </View>
+            )}
+            {analysis.state === "done" && (
+              <Text className="text-sm leading-5 text-ink">{analysis.text}</Text>
+            )}
+            {analysis.state === "unavailable" && (
+              <Text className="text-sm leading-5 text-ink-muted">
+                Couldn't describe this photo. Responders will still see it.
+              </Text>
+            )}
+          </View>
+
+          {/* The reporter's own details, stored separately from the AI text */}
+          <Text
+            accessibilityRole="header"
+            className="mt-6 text-base font-bold text-ink"
+          >
+            Add details (optional)
+          </Text>
+          <View className="mt-2 flex-row flex-wrap">
+            {DETAIL_CHIPS.map((chip) => (
+              <Chip
+                key={chip}
+                label={chip}
+                selected={chips.includes(chip)}
+                onPress={() => toggleChip(chip)}
+              />
+            ))}
+          </View>
+          <TextInput
+            value={note}
+            onChangeText={setNote}
+            maxLength={NOTE_MAX}
+            multiline
+            textAlignVertical="top"
+            placeholder="Anything else responders should know?"
+            placeholderTextColor={colors.ink.subtle}
+            accessibilityLabel="Extra details for responders"
+            className="mt-2 min-h-[88px] rounded-2xl border border-line p-4 text-base text-ink"
+          />
+          <Text className="mt-1 text-right text-xs text-ink-subtle">
+            {note.length}/{NOTE_MAX}
+          </Text>
+        </ScrollView>
+
+        <View className="px-4 pt-2" style={{ paddingBottom: insets.bottom + 12 }}>
+          {location.state === "missing" ? (
+            <>
+              <Text className="mb-3 text-center text-sm leading-5 text-ink-muted">
+                {location.permissionDenied
+                  ? "Turn on location so responders can find this emergency."
+                  : "We can't find your location yet. Move near a window or outside."}
+              </Text>
+              <CallHotlineButton className="mb-2" />
+              {location.permissionDenied ? (
+                <Button
+                  title="Open Settings"
+                  variant="secondary"
+                  onPress={() => Linking.openSettings()}
+                />
+              ) : (
+                <Button title="Try again" variant="secondary" onPress={locate} />
+              )}
+            </>
           ) : (
-            <Text className="text-white font-bold text-base">SEND</Text>
+            <Button
+              title="Send report"
+              size="lg"
+              loading={sending}
+              loadingTitle="Sending…"
+              disabled={location.state !== "found"}
+              onPress={send}
+              accessibilityHint={
+                location.state === "locating"
+                  ? "Available once your location is found"
+                  : undefined
+              }
+            />
           )}
-        </TouchableOpacity>
-      </View>
-    </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
+    </Screen>
   );
 }
-

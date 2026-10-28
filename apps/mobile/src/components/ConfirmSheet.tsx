@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { Modal, View, Text, Pressable } from "react-native";
+import { Modal, View, Text } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Button } from "@/components/ui/Button";
+import { Chip } from "@/components/ui/Chip";
 
 interface ConfirmSheetProps {
   visible: boolean;
@@ -66,30 +67,17 @@ export function ConfirmSheet({
 
           {reasons && reasons.length > 0 && (
             <View className="mt-4 flex-row flex-wrap">
-              {reasons.map((option) => {
-                const selected = option === reason;
-                return (
-                  <Pressable
-                    key={option}
-                    onPress={() => setReason(selected ? undefined : option)}
-                    accessibilityRole="radio"
-                    accessibilityState={{ selected }}
-                    className={`mb-2 mr-2 min-h-[44px] justify-center rounded-full border px-4 ${
-                      selected
-                        ? "border-navy bg-navy"
-                        : "border-line bg-white active:bg-navy-tint"
-                    }`}
-                  >
-                    <Text
-                      className={`text-sm font-medium ${
-                        selected ? "text-white" : "text-ink"
-                      }`}
-                    >
-                      {option}
-                    </Text>
-                  </Pressable>
-                );
-              })}
+              {reasons.map((option) => (
+                <Chip
+                  key={option}
+                  label={option}
+                  role="radio"
+                  selected={option === reason}
+                  onPress={() =>
+                    setReason(option === reason ? undefined : option)
+                  }
+                />
+              ))}
             </View>
           )}
 

@@ -14,9 +14,6 @@ import { IncidentLiveScreen } from "./src/screens/live/IncidentLiveScreen";
 import { ReportScreen1 } from "./src/screens/report/ReportScreen1";
 import { ReportScreen2 } from "./src/screens/report/ReportScreen2";
 import { ReportScreen3 } from "./src/screens/report/ReportScreen3";
-import { ReportScreen4 } from "./src/screens/report/ReportScreen4";
-import { ReportScreen5 } from "./src/screens/report/ReportScreen5";
-import { ReportScreenRejected } from "./src/screens/report/ReportScreenRejected";
 import { SettingsScreen1 } from "./src/screens/settingsOptions/SettingsScreen1";
 import { ProfileScreen } from "./src/screens/settingsOptions/ProfileScreen";
 import { HistoryScreen } from "./src/screens/settingsOptions/HistoryScreen";
@@ -54,18 +51,8 @@ function RootNavigator() {
           <Stack.Screen name="Report2" component={ReportScreen2} />
           <Stack.Screen name="Report3" component={ReportScreen3} />
           <Stack.Screen
-            name="Report4"
-            component={ReportScreen4}
-            options={liveScreenOptions}
-          />
-          <Stack.Screen
-            name="Report5"
-            component={ReportScreen5}
-            options={liveScreenOptions}
-          />
-          <Stack.Screen
-            name="ReportRejected"
-            component={ReportScreenRejected}
+            name="ReportLive"
+            component={IncidentLiveScreen}
             options={liveScreenOptions}
           />
           <Stack.Screen name="Settings1" component={SettingsScreen1} />
