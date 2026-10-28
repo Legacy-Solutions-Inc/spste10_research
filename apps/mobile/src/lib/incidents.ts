@@ -7,6 +7,7 @@ import {
   type Coords,
   type QuickPosition,
 } from "@/lib/location";
+import type { VictimSnapshot } from "@/lib/profile";
 
 export type IncidentKind = "alert" | "report";
 export type IncidentStatus =
@@ -37,7 +38,7 @@ function requireClient() {
 /** Creates a pending alert and returns its id. Throws with a readable message. */
 export async function createAlert(
   coords: Coords,
-  locationName?: string
+  victim?: VictimSnapshot | null
 ): Promise<string> {
   const client = requireClient();
   const {
@@ -47,17 +48,26 @@ export async function createAlert(
     throw new Error("You're signed out. Log in again to send an alert.");
   }
 
-  const { data, error } = await client
-    .from("alerts")
-    .insert({
-      user_id: user.id,
-      latitude: coords.latitude,
-      longitude: coords.longitude,
-      location_name: locationName ?? null,
-      status: "pending",
-    })
-    .select("id")
-    .single();
+  const insertAlert = (withVictim: boolean) =>
+    client
+      .from("alerts")
+      .insert({
+        user_id: user.id,
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        ...(withVictim ? victim : {}),
+        status: "pending",
+      })
+      .select("id")
+      .single();
+
+  let { data, error } = await insertAlert(!!victim);
+  if (error && victim) {
+    // The emergency info must never stop the alert itself (e.g. a column that
+    // isn't migrated yet), so retry with just the essentials
+    console.error("Create alert with victim info failed, retrying:", error);
+    ({ data, error } = await insertAlert(false));
+  }
 
   if (error || !data) {
     console.error("Create alert error:", error);
@@ -104,6 +114,19 @@ export async function createReport(report: NewReport): Promise<string> {
     throw new Error("Your report didn't go through. Check your connection.");
   }
   return data.id as string;
+}
+
+/** Best-effort: attach the citizen's emergency info if it wasn't ready at send time */
+export async function attachVictimSnapshot(id: string, victim: VictimSnapshot) {
+  const client = requireClient();
+  const { error } = await client
+    .from("alerts")
+    .update(victim)
+    .eq("id", id)
+    .eq("status", "pending");
+  if (error) {
+    console.error("Attach victim info failed:", error.message);
+  }
 }
 
 /** Best-effort update of a still-pending report (photo path, late AI text) */

@@ -15,11 +15,13 @@ import { ReportScreen1 } from "./src/screens/report/ReportScreen1";
 import { ReportScreen2 } from "./src/screens/report/ReportScreen2";
 import { ReportScreen3 } from "./src/screens/report/ReportScreen3";
 import { SettingsScreen1 } from "./src/screens/settingsOptions/SettingsScreen1";
-import { ProfileScreen } from "./src/screens/settingsOptions/ProfileScreen";
+import { EmergencyInfoScreen } from "./src/screens/onboarding/EmergencyInfoScreen";
+import { LocationPermissionScreen } from "./src/screens/onboarding/LocationPermissionScreen";
 import { HistoryScreen } from "./src/screens/settingsOptions/HistoryScreen";
 import { HistoryDetailsScreen } from "./src/screens/settingsOptions/HistoryDetailsScreen";
 import { BootScreen } from "./src/components/BootScreen";
 import { AuthProvider, useAuth } from "./src/lib/auth";
+import { useOnboarded } from "./src/lib/onboarding";
 import type { RootStackParamList } from "./src/navigation/types";
 import "./global.css";
 
@@ -29,11 +31,26 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 const liveScreenOptions = { gestureEnabled: false };
 
 function RootNavigator() {
-  const { status } = useAuth();
+  const { status, session } = useAuth();
+  const onboarded = useOnboarded(
+    status === "signedIn" ? session?.user.id : undefined
+  );
 
-  if (status === "loading") {
+  if (status === "loading" || (status === "signedIn" && onboarded === null)) {
     return <BootScreen />;
   }
+
+  // The first screen of a group is where the navigator lands, so onboarding
+  // goes first until this user has finished it
+  const onboardingScreens = (
+    <>
+      <Stack.Screen name="OnboardingInfo" component={EmergencyInfoScreen} />
+      <Stack.Screen
+        name="OnboardingLocation"
+        component={LocationPermissionScreen}
+      />
+    </>
+  );
 
   // Rendering one set of screens or the other means signing out can't be
   // swiped back into Home, and a signed-in user never sees the login screens
@@ -41,6 +58,7 @@ function RootNavigator() {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       {status === "signedIn" ? (
         <>
+          {!onboarded && onboardingScreens}
           <Stack.Screen name="Home" component={HomeScreen} />
           <Stack.Screen
             name="AlertLive"
@@ -56,12 +74,13 @@ function RootNavigator() {
             options={liveScreenOptions}
           />
           <Stack.Screen name="Settings1" component={SettingsScreen1} />
-          <Stack.Screen name="Profile" component={ProfileScreen} />
+          <Stack.Screen name="Profile" component={EmergencyInfoScreen} />
           <Stack.Screen name="History" component={HistoryScreen} />
           <Stack.Screen
             name="HistoryDetails"
             component={HistoryDetailsScreen}
           />
+          {onboarded && onboardingScreens}
         </>
       ) : (
         <>

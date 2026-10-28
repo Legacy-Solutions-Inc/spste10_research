@@ -1,35 +1,27 @@
-import {
-  View,
-  Text,
-  KeyboardAvoidingView,
-  Platform,
-  TextInput,
-  ImageBackground,
-  Alert,
-} from "react-native";
+import { View, Text, Alert } from "react-native";
 import { useState } from "react";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "@/navigation/types";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
-import { SupabaseWarning } from "./components/SupabaseWarning";
 import { getApiOrigin } from "@/lib/openai";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Button } from "@/components/ui/Button";
+import { TextField } from "@/components/ui/TextField";
+import { AuthLayout } from "./components/AuthLayout";
 
 type ResetPasswordNav = NativeStackNavigationProp<RootStackParamList, "Login4">;
 
 export function ResetPassword() {
   const navigation = useNavigation<ResetPasswordNav>();
   const [email, setEmail] = useState("");
+  const [error, setError] = useState<string | undefined>();
   const [loading, setLoading] = useState(false);
   const supabaseAvailable = isSupabaseConfigured();
-  const insets = useSafeAreaInsets();
 
   const handleSend = async () => {
     const trimmed = email.trim();
     if (!trimmed) {
-      Alert.alert("Error", "Please enter your email address.");
+      setError("Enter your email address.");
       return;
     }
 
@@ -44,11 +36,11 @@ export function ResetPassword() {
     setLoading(true);
     try {
       // The link opens the web app's reset page, since the mobile app has no deep link handler
-      const { error } = await supabase.auth.resetPasswordForEmail(trimmed, {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(trimmed, {
         redirectTo: `${getApiOrigin()}/reset-password`,
       });
-      if (error) {
-        Alert.alert("Error", error.message);
+      if (resetError) {
+        Alert.alert("Error", resetError.message);
       } else {
         Alert.alert(
           "Email sent",
@@ -68,88 +60,48 @@ export function ResetPassword() {
   };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      className="flex-1 bg-black"
+    <AuthLayout
+      title="Forgot your password?"
+      subtitle="Enter your email and we'll send you a link to reset it."
     >
-      {/* Background image */}
-      <ImageBackground
-        source={require("../../../../assets/loginpage.png")}
-        resizeMode="cover"
-        className="flex-1 justify-end"
-      >
-        <View className="flex-1 px-2 pt-40">
-          <View
-            className="flex-1 rounded-t-3xl bg-surface px-4 pt-10"
-            style={{ paddingBottom: insets.bottom + 24 }}
+      <TextField
+        label="Email"
+        value={email}
+        onChangeText={(value) => {
+          setEmail(value);
+          setError(undefined);
+        }}
+        keyboardType="email-address"
+        autoCapitalize="none"
+        autoCorrect={false}
+        autoComplete="email"
+        textContentType="emailAddress"
+        editable={!loading && supabaseAvailable}
+        error={error}
+      />
+
+      <Button
+        title="Send reset link"
+        loadingTitle="Sending…"
+        size="lg"
+        loading={loading}
+        disabled={!supabaseAvailable}
+        onPress={handleSend}
+        className="mt-2"
+      />
+
+      <View className="mt-6 items-center">
+        <Text className="text-sm text-ink-muted">
+          Remember your password?{" "}
+          <Text
+            className="font-semibold text-navy"
+            onPress={handleSignIn}
+            accessibilityRole="link"
           >
-            {/* Brand */}
-            <View className="items-center mb-4">
-              <Text className="text-4xl font-extrabold tracking-[0.35em] text-[#0b376c]">
-                AGAP
-              </Text>
-            </View>
-
-            {/* Title */}
-            <View className="items-center mb-4">
-              <Text className="text-base font-semibold text-[#0b376c]">
-                Forgot Password?
-              </Text>
-            </View>
-
-            {/* Description */}
-            <View className="items-center mb-8 px-4">
-              <Text className="text-xs text-gray-600 text-center leading-5">
-                Please enter your email address, and we&apos;ll send password
-                reset instructions shortly.
-              </Text>
-            </View>
-
-            {!supabaseAvailable && (
-              <View className="mb-4">
-                <SupabaseWarning />
-              </View>
-            )}
-
-            {/* Email input */}
-            <View className="mb-8 px-2">
-              <TextInput
-                className="h-11 rounded-full border border-[#1b4f8f]/40 px-4 text-sm text-gray-900 bg-white"
-                placeholder="Email address"
-                placeholderTextColor="#a0aec0"
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                editable={!loading && supabaseAvailable}
-              />
-            </View>
-
-            <Button
-              title="Send reset link"
-              loadingTitle="Sending…"
-              loading={loading}
-              disabled={!supabaseAvailable}
-              onPress={handleSend}
-              className="mt-2"
-            />
-
-            {/* Bottom text */}
-            <View className="mt-10 items-center">
-              <Text className="text-xs text-gray-500">
-                Remember your password?{" "}
-                <Text
-                  className="font-semibold text-[#0b376c]"
-                  onPress={handleSignIn}
-                >
-                  Log in
-                </Text>
-              </Text>
-            </View>
-          </View>
-        </View>
-      </ImageBackground>
-    </KeyboardAvoidingView>
+            Log in
+          </Text>
+        </Text>
+      </View>
+    </AuthLayout>
   );
 }

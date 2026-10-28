@@ -33,10 +33,12 @@ import {
 } from "@/lib/location";
 import {
   createAlert,
+  attachVictimSnapshot,
   refineIncidentPosition,
   closeIncident,
   type IncidentKind,
 } from "@/lib/incidents";
+import { getVictimSnapshot, type VictimSnapshot } from "@/lib/profile";
 import colors from "@/theme/colors";
 
 type LiveNavigation = NativeStackNavigationProp<
@@ -47,6 +49,8 @@ type LiveRoute = RouteProp<RootStackParamList, "AlertLive" | "ReportLive">;
 
 // After this long without a responder, surface the hotline
 const ESCALATE_AFTER_MS = 60000;
+// Emergency info is attached after the insert if it isn't ready by then
+const SNAPSHOT_WAIT_MS = 300;
 
 const COPY = {
   alert: {
@@ -166,6 +170,8 @@ export function IncidentLiveScreen() {
 
   const sendAlert = useCallback(async () => {
     setSendPhase({ step: "locating" });
+    // Loads alongside the location so it never delays the alert
+    const snapshotPromise = getVictimSnapshot();
     let permitted = false;
     let position: QuickPosition | null = null;
     try {
@@ -181,7 +187,18 @@ export function IncidentLiveScreen() {
 
     setSendPhase({ step: "sending" });
     try {
-      const id = await createAlert(position);
+      const readySnapshot = await Promise.race([
+        snapshotPromise,
+        new Promise<null>((resolve) =>
+          setTimeout(() => resolve(null), SNAPSHOT_WAIT_MS)
+        ),
+      ]);
+      const id = await createAlert(position, readySnapshot);
+      if (!readySnapshot) {
+        snapshotPromise.then((victim: VictimSnapshot | null) => {
+          if (victim) attachVictimSnapshot(id, victim);
+        });
+      }
       sentAtRef.current = Date.now();
       setIncidentId(id);
       // Keeps the id if the screen is re-rendered from navigation state

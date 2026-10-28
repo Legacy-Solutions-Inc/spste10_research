@@ -6,6 +6,8 @@ export type RootStackParamList = {
   Login3: undefined;
   Login4: undefined;
   Login5: { email?: string } | undefined;
+  OnboardingInfo: undefined;
+  OnboardingLocation: undefined;
   Home: undefined;
   // Without an id the screen sends a new alert; with one it follows it live
   AlertLive: { id?: string } | undefined;

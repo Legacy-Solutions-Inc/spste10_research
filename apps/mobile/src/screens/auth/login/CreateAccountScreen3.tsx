@@ -1,190 +1,96 @@
-import {
-  View,
-  Text,
-  KeyboardAvoidingView,
-  Platform,
-  TextInput,
-  ImageBackground,
-} from "react-native";
+import { View, Text } from "react-native";
 import { useState } from "react";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { RootStackParamList } from "@/navigation/types";
 import { Button } from "@/components/ui/Button";
+import { TextField } from "@/components/ui/TextField";
 import { useSignUp } from "./hooks/useSignUp";
-import { SupabaseWarning } from "./components/SupabaseWarning";
+import { AuthLayout } from "./components/AuthLayout";
+
+const MIN_PASSWORD_LENGTH = 6;
 
 export function CreateAccountScreen() {
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList, "Login3">>();
   const [email, setEmail] = useState("");
-  const [username, setUsername] = useState("");
-  const [contactNumber, setContactNumber] = useState("");
   const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const insets = useSafeAreaInsets();
+  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const { signUp, loading, supabaseAvailable } = useSignUp();
 
-  const { signUp, loading: signUpLoading, supabaseAvailable } = useSignUp();
-
-  const loading = signUpLoading;
-
+  // Validate here so nothing fails silently; server errors still come from the hook
   const handleCreateAccount = () => {
-    // Basic client-side validation
-    if (
-      !email.trim() ||
-      !username.trim() ||
-      !contactNumber.trim() ||
-      !password.trim() ||
-      !confirmPassword.trim()
-    ) {
-      // useSignUp already shows alerts for some errors; keep this simple
-      return;
+    const next: typeof errors = {};
+    if (!/^\S+@\S+\.\S+$/.test(email.trim())) {
+      next.email = "Enter a valid email address.";
     }
-
-    if (password !== confirmPassword) {
-      // Avoid extra dependency on Alert; simple early return
-      return;
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      next.password = `Use at least ${MIN_PASSWORD_LENGTH} characters.`;
     }
-
-    // Use email + password for Supabase sign up, pass username as full_name
-    signUp(email, password, username.trim());
+    setErrors(next);
+    if (Object.keys(next).length > 0) return;
+    signUp(email, password);
   };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      className="flex-1 bg-black"
+    <AuthLayout
+      title="Create your account"
+      subtitle="You'll add your emergency info next."
     >
-      {/* Background image */}
-      <ImageBackground
-        source={require("../../../../assets/loginpage.png")}
-        resizeMode="cover"
-        className="flex-1 justify-end"
-      >
-        <View className="flex-1 px-2 pt-40">
-          <View
-            className="flex-1 rounded-t-3xl bg-surface px-4 pt-10"
-            style={{ paddingBottom: insets.bottom + 24 }}
+      <TextField
+        label="Email"
+        value={email}
+        onChangeText={(value) => {
+          setEmail(value);
+          setErrors((current) => ({ ...current, email: undefined }));
+        }}
+        keyboardType="email-address"
+        autoCapitalize="none"
+        autoCorrect={false}
+        autoComplete="email"
+        textContentType="emailAddress"
+        editable={!loading && supabaseAvailable}
+        error={errors.email}
+      />
+      <TextField
+        label="Password"
+        value={password}
+        onChangeText={(value) => {
+          setPassword(value);
+          setErrors((current) => ({ ...current, password: undefined }));
+        }}
+        secureToggle
+        autoCapitalize="none"
+        autoCorrect={false}
+        autoComplete="new-password"
+        textContentType="newPassword"
+        editable={!loading && supabaseAvailable}
+        hint={`At least ${MIN_PASSWORD_LENGTH} characters.`}
+        error={errors.password}
+      />
+
+      <Button
+        title="Create account"
+        loadingTitle="Creating account…"
+        size="lg"
+        loading={loading}
+        disabled={!supabaseAvailable}
+        onPress={handleCreateAccount}
+        className="mt-2"
+      />
+
+      <View className="mt-6 items-center">
+        <Text className="text-sm text-ink-muted">
+          Already have an account?{" "}
+          <Text
+            className="font-semibold text-navy"
+            onPress={() => navigation.navigate("Login2")}
+            accessibilityRole="link"
           >
-            {/* Brand */}
-            <View className="items-center mb-4">
-              <Text className="text-4xl font-extrabold tracking-[0.35em] text-[#0b376c]">
-                AGAP
-              </Text>
-            </View>
-
-            {/* Subtitle */}
-            <View className="items-center mb-8">
-              <Text className="text-base font-semibold text-[#0b376c]">
-                Create your account
-              </Text>
-            </View>
-
-            {/* Supabase warning (optional) */}
-            {!supabaseAvailable && (
-              <View className="mb-4">
-                <SupabaseWarning />
-              </View>
-            )}
-
-            {/* Email */}
-            <View className="mb-3 px-2">
-              <TextInput
-                className="h-11 rounded-full border border-[#1b4f8f]/40 px-4 text-sm text-gray-900 bg-white"
-                placeholder="Email"
-                placeholderTextColor="#a0aec0"
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                editable={!loading && supabaseAvailable}
-              />
-            </View>
-
-            {/* Username */}
-            <View className="mb-3 px-2">
-              <TextInput
-                className="h-11 rounded-full border border-[#1b4f8f]/40 px-4 text-sm text-gray-900 bg-white"
-                placeholder="Username"
-                placeholderTextColor="#a0aec0"
-                value={username}
-                onChangeText={setUsername}
-                autoCapitalize="none"
-                autoCorrect={false}
-                editable={!loading && supabaseAvailable}
-              />
-            </View>
-
-            {/* Contact Number */}
-            <View className="mb-3 px-2">
-              <TextInput
-                className="h-11 rounded-full border border-[#1b4f8f]/40 px-4 text-sm text-gray-900 bg-white"
-                placeholder="Contact Number"
-                placeholderTextColor="#a0aec0"
-                value={contactNumber}
-                onChangeText={setContactNumber}
-                keyboardType="phone-pad"
-                autoCorrect={false}
-                editable={!loading && supabaseAvailable}
-              />
-            </View>
-
-            {/* Password */}
-            <View className="mb-3 px-2">
-              <TextInput
-                className="h-11 rounded-full border border-[#1b4f8f]/40 px-4 text-sm text-gray-900 bg-white"
-                placeholder="Password"
-                placeholderTextColor="#a0aec0"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry
-                autoCapitalize="none"
-                autoCorrect={false}
-                editable={!loading && supabaseAvailable}
-              />
-            </View>
-
-            {/* Confirm Password */}
-            <View className="mb-6 px-2">
-              <TextInput
-                className="h-11 rounded-full border border-[#1b4f8f]/40 px-4 text-sm text-gray-900 bg-white"
-                placeholder="Confirm Password"
-                placeholderTextColor="#a0aec0"
-                value={confirmPassword}
-                onChangeText={setConfirmPassword}
-                secureTextEntry
-                autoCapitalize="none"
-                autoCorrect={false}
-                editable={!loading && supabaseAvailable}
-              />
-            </View>
-
-            <Button
-              title="Create account"
-              loadingTitle="Creating account…"
-              loading={signUpLoading}
-              disabled={!supabaseAvailable}
-              onPress={handleCreateAccount}
-              className="mt-2"
-            />
-
-            {/* Bottom text - Already have an account? */}
-            <View className="mt-8 items-center">
-              <Text className="text-xs text-gray-500">
-                Already have an account?{" "}
-                <Text
-                  className="font-semibold text-[#0b376c]"
-                  onPress={() => navigation.navigate("Login2")}
-                >
-                  Sign in
-                </Text>
-              </Text>
-            </View>
-          </View>
-        </View>
-      </ImageBackground>
-    </KeyboardAvoidingView>
+            Log in
+          </Text>
+        </Text>
+      </View>
+    </AuthLayout>
   );
 }
