@@ -133,12 +133,19 @@ export default function RegisterForm() {
     try {
       const supabase = createClient();
 
+      // The database files the access request from this metadata when the account is
+      // created (handle_new_user), so it works even before the email is confirmed.
       const { data, error: signUpError } = await supabase.auth.signUp({
         email,
         password: formData.password,
         options: {
           data: {
             full_name: officeName,
+            requested_role: "responder",
+            municipality: formData.municipality.trim(),
+            province: formData.province.trim(),
+            office_address: formData.officeAddress.trim(),
+            contact_number: formData.contactNumber.trim(),
           },
         },
       });
@@ -155,38 +162,15 @@ export default function RegisterForm() {
         return;
       }
 
-      // Web registration is for response offices only: mark the account as a responder
-      const { error: profileError } = await supabase
-        .from("profiles")
-        // @ts-ignore - Supabase types may not be fully generated
-        .update({ full_name: officeName, role: "responder" })
-        .eq("id", data.user.id);
-
-      if (profileError) {
-        console.error("Error marking account as responder:", profileError);
-        setErrors({ general: REQUEST_NOT_SAVED });
-        setLoading(false);
-        return;
-      }
-
-      // Then file the access request for an administrator to review
-      const { error: responderProfileError } = await supabase
-        .from("responder_profiles")
-        // @ts-ignore - Supabase types may not be fully generated
-        .insert({
-          id: data.user.id,
-          municipality: formData.municipality.trim(),
-          province: formData.province.trim(),
-          office_address: formData.officeAddress.trim(),
-          contact_number: formData.contactNumber.trim(),
-          account_status: "pending",
-        });
-
-      if (responderProfileError) {
-        console.error("Error creating responder profile:", responderProfileError);
-        setErrors({ general: REQUEST_NOT_SAVED });
-        setLoading(false);
-        return;
+      // With a session (email confirmation off) we can confirm the request was filed
+      if (data.session) {
+        const { data: profile } = await supabase.from("profiles").select("role").eq("id", data.user.id).maybeSingle();
+        if ((profile as { role: string } | null)?.role !== "responder") {
+          await supabase.auth.signOut();
+          setErrors({ general: REQUEST_NOT_SAVED });
+          setLoading(false);
+          return;
+        }
       }
 
       // A pending office shouldn't stay signed in (only happens when email confirmation is off)
