@@ -17,6 +17,8 @@ import type { RootStackParamList } from "@/navigation/types";
 import { useGetProfile } from "./hooks/useGetProfile";
 import { useUpdateProfile } from "./hooks/useUpdateProfile";
 import { useUploadProfileImage } from "./hooks/useUploadProfileImage";
+import { Screen } from "@/components/ui/Screen";
+import { ScreenHeader } from "@/components/ui/ScreenHeader";
 
 type ProfileNavigation = NativeStackNavigationProp<
   RootStackParamList,
@@ -175,22 +177,9 @@ export function ProfileScreen() {
   }
 
   return (
-    <ScrollView className="flex-1 bg-white">
-      {/* Header */}
-      <View className="flex-row items-center px-4 pt-20 pb-4">
-        <TouchableOpacity
-          onPress={() => navigation.navigate("Settings1")}
-          className="h-12 w-12 rounded-full bg-blue-900 items-center justify-center mr-4"
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          activeOpacity={0.7}
-        >
-          <MaterialCommunityIcons name="arrow-left" size={24} color="white" />
-        </TouchableOpacity>
-        <Text className="text-xl font-bold text-blue-900 flex-1 text-center -ml-14">
-          Profile
-        </Text>
-      </View>
-
+    <Screen edges={["top"]}>
+      <ScreenHeader title="Profile" onBack={() => navigation.goBack()} />
+      <ScrollView className="flex-1">
       {/* Profile Picture Section */}
       <View className="items-center mt-6 mb-6">
         <View className="h-32 w-32 rounded-full border-2 border-gray-300 items-center justify-center overflow-hidden bg-gray-100">
@@ -317,7 +306,8 @@ export function ProfileScreen() {
           </Text>
         </TouchableOpacity>
       </View>
-    </ScrollView>
+      </ScrollView>
+    </Screen>
   );
 }
 

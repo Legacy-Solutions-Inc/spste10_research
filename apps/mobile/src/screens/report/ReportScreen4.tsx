@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { StatusBar } from "expo-status-bar";
+import { useHardwareBack } from "@/navigation/useHardwareBack";
 import type { RootStackParamList } from "@/navigation/types";
 import { CancelAlertModal } from "@/components/CancelAlertModal";
 import { useCheckReportStatus } from "./hooks/useCheckReportStatus";
@@ -16,6 +18,8 @@ export function ReportScreen4() {
   const route = useRoute<Report4Route>();
   const reportId = route.params?.reportId;
   const [showCancelModal, setShowCancelModal] = useState(false);
+  // Leaving a live incident must go through Cancel
+  useHardwareBack();
   
   const { status, loading: statusLoading } = useCheckReportStatus(reportId || null, !!reportId);
   const { cancelReport, loading: cancelLoading } = useCancelReport();
@@ -88,29 +92,30 @@ export function ReportScreen4() {
     if (!status) return;
 
     if (status.status === "accepted" || status.responseStatus === "accepted") {
-      navigation.navigate("Report5", { reportId });
+      navigation.replace("Report5", { reportId });
     } else if (status.status === "rejected" || status.responseStatus === "rejected") {
-      navigation.navigate("ReportRejected");
+      navigation.replace("ReportRejected");
     } else if (status.status === "canceled") {
-      navigation.navigate("Home");
+      navigation.popToTop();
     }
   }, [status, navigation, reportId]);
 
   const handleCancel = async () => {
     if (!reportId) {
-      navigation.navigate("Home");
+      navigation.popToTop();
       return;
     }
 
     setShowCancelModal(false);
     const success = await cancelReport(reportId);
     if (success) {
-      navigation.navigate("Home");
+      navigation.popToTop();
     }
   };
 
   return (
-    <View className="flex-1 bg-[#0b376c] justify-center items-center px-6 pt-20">
+    <View className="flex-1 bg-[#0b376c] justify-center items-center px-6">
+      <StatusBar style="light" />
       {/* Title */}
       <Text className="text-6xl font-extrabold text-white text-center mb-4">
         Report

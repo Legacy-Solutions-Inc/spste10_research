@@ -3,6 +3,8 @@ import { useState } from "react";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "@/navigation/types";
+import { useHardwareBack } from "@/navigation/useHardwareBack";
+import { Screen } from "@/components/ui/Screen";
 import { CancelAlertModal } from "@/components/CancelAlertModal";
 import { useCancelReport } from "./hooks/useCancelReport";
 
@@ -14,23 +16,25 @@ export function ReportScreen5() {
   const route = useRoute<Report5Route>();
   const reportId = route.params?.reportId;
   const [showCancelModal, setShowCancelModal] = useState(false);
+  // Leaving a live incident must go through Cancel
+  useHardwareBack();
   const { cancelReport, loading: cancelLoading } = useCancelReport();
 
   const handleCancel = async () => {
     if (!reportId) {
-      navigation.navigate("Home");
+      navigation.popToTop();
       return;
     }
 
     setShowCancelModal(false);
     const success = await cancelReport(reportId);
     if (success) {
-      navigation.navigate("Home");
+      navigation.popToTop();
     }
   };
 
   return (
-    <View className="flex-1 bg-white pt-12">
+    <Screen>
       <View className="flex-1 justify-center items-center px-6">
         {/* Main text content - centered */}
         <View className="items-center mb-8">
@@ -67,7 +71,7 @@ export function ReportScreen5() {
         onConfirm={handleCancel}
         onCancel={() => setShowCancelModal(false)}
       />
-    </View>
+    </Screen>
   );
 }
 

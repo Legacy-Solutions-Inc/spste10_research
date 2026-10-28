@@ -1,7 +1,6 @@
 import {
   View,
   Text,
-  TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
   TextInput,
@@ -15,6 +14,8 @@ import type { RootStackParamList } from "@/navigation/types";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { SupabaseWarning } from "./components/SupabaseWarning";
 import { getApiOrigin } from "@/lib/openai";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Button } from "@/components/ui/Button";
 
 type ResetPasswordNav = NativeStackNavigationProp<RootStackParamList, "Login4">;
 
@@ -23,6 +24,7 @@ export function ResetPassword() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const supabaseAvailable = isSupabaseConfigured();
+  const insets = useSafeAreaInsets();
 
   const handleSend = async () => {
     const trimmed = email.trim();
@@ -77,7 +79,10 @@ export function ResetPassword() {
         className="flex-1 justify-end"
       >
         <View className="flex-1 px-2 pt-40">
-          <View className="flex-1 rounded-t-3xl bg-[#f5f6fa] px-4 pt-10 pb-8">
+          <View
+            className="flex-1 rounded-t-3xl bg-surface px-4 pt-10"
+            style={{ paddingBottom: insets.bottom + 24 }}
+          >
             {/* Brand */}
             <View className="items-center mb-4">
               <Text className="text-4xl font-extrabold tracking-[0.35em] text-[#0b376c]">
@@ -121,28 +126,24 @@ export function ResetPassword() {
               />
             </View>
 
-            {/* Send button */}
-            <TouchableOpacity
+            <Button
+              title="Send reset link"
+              loadingTitle="Sending…"
+              loading={loading}
+              disabled={!supabaseAvailable}
               onPress={handleSend}
-              disabled={loading || !supabaseAvailable}
-              className={`mt-2 h-11 items-center justify-center rounded-full border border-[#c3d2eb] bg-[#e6edf9] ${
-                loading || !supabaseAvailable ? "opacity-50" : ""
-              }`}
-            >
-              <Text className="text-sm font-semibold text-[#9aa8c6]">
-                {loading ? "Sending..." : "Send"}
-              </Text>
-            </TouchableOpacity>
+              className="mt-2"
+            />
 
             {/* Bottom text */}
             <View className="mt-10 items-center">
               <Text className="text-xs text-gray-500">
-                Don&apos;t have an account?{" "}
+                Remember your password?{" "}
                 <Text
                   className="font-semibold text-[#0b376c]"
                   onPress={handleSignIn}
                 >
-                  Sign in
+                  Log in
                 </Text>
               </Text>
             </View>

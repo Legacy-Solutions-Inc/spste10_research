@@ -5,6 +5,8 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { CameraView, CameraType, useCameraPermissions } from "expo-camera";
 import * as Location from "expo-location";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { StatusBar } from "expo-status-bar";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { RootStackParamList } from "@/navigation/types";
 
 type Report1Navigation = NativeStackNavigationProp<
@@ -18,6 +20,7 @@ export function ReportScreen1() {
   const [permission, requestPermission] = useCameraPermissions();
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const cameraRef = useRef<CameraView>(null);
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     // Request camera permission on mount
@@ -89,7 +92,7 @@ export function ReportScreen1() {
   // Permission denied fallback UI
   if (permission && !permission.granted) {
     return (
-      <View className="flex-1 bg-white pt-20 px-6">
+      <View className="flex-1 bg-white px-6" style={{ paddingTop: insets.top + 16 }}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
           className="mb-6 w-12 h-12 rounded-full bg-white items-center justify-center"
@@ -129,9 +132,13 @@ export function ReportScreen1() {
   }
 
   return (
-    <View className="flex-1 bg-black pt-12">
+    <View className="flex-1 bg-black">
+      <StatusBar style="light" />
       {/* Top section with back button and instruction */}
-      <View className="absolute top-12 left-4 right-4 z-10">
+      <View
+        className="absolute left-4 right-4 z-10"
+        style={{ top: insets.top + 8 }}
+      >
         <TouchableOpacity
           onPress={() => navigation.goBack()}
           className="mb-4 w-12 h-12 rounded-full bg-white items-center justify-center"
@@ -184,7 +191,10 @@ export function ReportScreen1() {
       </View>
 
       {/* Camera shutter button at bottom */}
-      <View className="absolute bottom-8 left-0 right-0 items-center pb-8">
+      <View
+        className="absolute left-0 right-0 items-center"
+        style={{ bottom: insets.bottom + 32 }}
+      >
         <TouchableOpacity
           onPress={takePicture}
           className="h-16 w-16 rounded-full bg-blue-900 items-center justify-center"

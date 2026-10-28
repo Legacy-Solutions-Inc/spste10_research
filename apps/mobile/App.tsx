@@ -24,119 +24,94 @@ import { SettingsScreen1 } from "./src/screens/settingsOptions/SettingsScreen1";
 import { ProfileScreen } from "./src/screens/settingsOptions/ProfileScreen";
 import { HistoryScreen } from "./src/screens/settingsOptions/HistoryScreen";
 import { HistoryDetailsScreen } from "./src/screens/settingsOptions/HistoryDetailsScreen";
+import { BootScreen } from "./src/components/BootScreen";
+import { AuthProvider, useAuth } from "./src/lib/auth";
 import type { RootStackParamList } from "./src/navigation/types";
 import "./global.css";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
+// Live alert/report screens can only be left through their own buttons
+const liveScreenOptions = { gestureEnabled: false };
+
+function RootNavigator() {
+  const { status } = useAuth();
+
+  if (status === "loading") {
+    return <BootScreen />;
+  }
+
+  // Rendering one set of screens or the other means signing out can't be
+  // swiped back into Home, and a signed-in user never sees the login screens
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      {status === "signedIn" ? (
+        <>
+          <Stack.Screen name="Home" component={HomeScreen} />
+          <Stack.Screen name="Alert" component={AlertScreen} />
+          <Stack.Screen
+            name="Alert2"
+            component={AlertScreen2}
+            options={liveScreenOptions}
+          />
+          <Stack.Screen
+            name="Alert3"
+            component={AlertScreen3}
+            options={liveScreenOptions}
+          />
+          <Stack.Screen
+            name="AlertRejected"
+            component={AlertScreenRejected}
+            options={liveScreenOptions}
+          />
+          <Stack.Screen name="Report1" component={ReportScreen1} />
+          <Stack.Screen name="Report2" component={ReportScreen2} />
+          <Stack.Screen name="Report3" component={ReportScreen3} />
+          <Stack.Screen
+            name="Report4"
+            component={ReportScreen4}
+            options={liveScreenOptions}
+          />
+          <Stack.Screen
+            name="Report5"
+            component={ReportScreen5}
+            options={liveScreenOptions}
+          />
+          <Stack.Screen
+            name="ReportRejected"
+            component={ReportScreenRejected}
+            options={liveScreenOptions}
+          />
+          <Stack.Screen name="Settings1" component={SettingsScreen1} />
+          <Stack.Screen name="Profile" component={ProfileScreen} />
+          <Stack.Screen name="History" component={HistoryScreen} />
+          <Stack.Screen
+            name="HistoryDetails"
+            component={HistoryDetailsScreen}
+          />
+        </>
+      ) : (
+        <>
+          <Stack.Screen name="Login1" component={LoginScreen1} />
+          <Stack.Screen name="Login2" component={LoginScreen2} />
+          <Stack.Screen name="Login3" component={CreateAccountScreen} />
+          <Stack.Screen name="Login4" component={ResetPassword} />
+          <Stack.Screen name="Login5" component={EmailConfirmationScreen} />
+        </>
+      )}
+    </Stack.Navigator>
+  );
+}
+
 function App() {
   return (
     <SafeAreaProvider>
-      <NavigationContainer>
-        <StatusBar style="auto" />
-        <Stack.Navigator initialRouteName="Login1">
-        <Stack.Screen
-          name="Login1"
-          component={LoginScreen1}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="Login2"
-          component={LoginScreen2}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="Login3"
-          component={CreateAccountScreen}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="Login4"
-          component={ResetPassword}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="Login5"
-          component={EmailConfirmationScreen}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="Home"
-          component={HomeScreen}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="Alert"
-          component={AlertScreen}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="Alert2"
-          component={AlertScreen2}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="Alert3"
-          component={AlertScreen3}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="AlertRejected"
-          component={AlertScreenRejected}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="Report1"
-          component={ReportScreen1}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="Report2"
-          component={ReportScreen2}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="Report3"
-          component={ReportScreen3}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="Report4"
-          component={ReportScreen4}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="Report5"
-          component={ReportScreen5}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="ReportRejected"
-          component={ReportScreenRejected}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="Settings1"
-          component={SettingsScreen1}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="Profile"
-          component={ProfileScreen}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="History"
-          component={HistoryScreen}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="HistoryDetails"
-          component={HistoryDetailsScreen}
-          options={{ headerShown: false }}
-        />
-      </Stack.Navigator>
-    </NavigationContainer>
+      <AuthProvider>
+        <NavigationContainer>
+          <StatusBar style="auto" />
+          <RootNavigator />
+        </NavigationContainer>
+      </AuthProvider>
     </SafeAreaProvider>
   );
 }

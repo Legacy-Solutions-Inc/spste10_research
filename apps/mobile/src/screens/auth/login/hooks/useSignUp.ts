@@ -3,12 +3,14 @@ import { Alert } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { useAuth } from "@/lib/auth";
 import type { RootStackParamList } from "@/navigation/types";
 
-type NavigationProp = NativeStackNavigationProp<RootStackParamList, "Home">;
+type NavigationProp = NativeStackNavigationProp<RootStackParamList, "Login3">;
 
 export function useSignUp() {
   const navigation = useNavigation<NavigationProp>();
+  const { admit } = useAuth();
   const [loading, setLoading] = useState(false);
   const supabaseAvailable = isSupabaseConfigured();
 
@@ -60,8 +62,9 @@ export function useSignUp() {
 
         // Check if session exists (with email confirmation disabled, Supabase should automatically create a session)
         if (data.session) {
-          // User is automatically logged in (email confirmation disabled)
-          navigation.replace("Home");
+          // User is automatically logged in (email confirmation disabled);
+          // new accounts always have the citizen role
+          admit(data.user.id);
           return true;
         } else {
           // Edge case: no session created (shouldn't happen with email confirmation disabled)

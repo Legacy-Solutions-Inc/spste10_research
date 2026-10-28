@@ -5,7 +5,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   ImageBackground,
-  ActivityIndicator,
   Alert,
 } from "react-native";
 import { useState, useEffect } from "react";
@@ -14,6 +13,9 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "@/navigation/types";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { useAuth } from "@/lib/auth";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Button } from "@/components/ui/Button";
 
 type EmailConfirmationNavigation = NativeStackNavigationProp<
   RootStackParamList,
@@ -23,6 +25,8 @@ type EmailConfirmationNavigation = NativeStackNavigationProp<
 export function EmailConfirmationScreen() {
   const navigation = useNavigation<EmailConfirmationNavigation>();
   const route = useRoute<RouteProp<RootStackParamList, "Login5">>();
+  const { admit } = useAuth();
+  const insets = useSafeAreaInsets();
   const [checking, setChecking] = useState(false);
   const [resending, setResending] = useState(false);
   const [email, setEmail] = useState<string>(
@@ -61,7 +65,7 @@ export function EmailConfirmationScreen() {
             [
               {
                 text: "OK",
-                onPress: () => navigation.replace("Home"),
+                onPress: () => admit(session.user.id),
               },
             ]
           );
@@ -164,7 +168,10 @@ export function EmailConfirmationScreen() {
         className="flex-1 justify-end"
       >
         <View className="flex-1 px-2 pt-40">
-          <View className="flex-1 rounded-t-3xl bg-[#f5f6fa] px-6 pt-10 pb-8">
+          <View
+            className="flex-1 rounded-t-3xl bg-surface px-6 pt-10"
+            style={{ paddingBottom: insets.bottom + 24 }}
+          >
             {/* Brand */}
             <View className="items-center mb-6">
               <Text className="text-4xl font-extrabold tracking-[0.35em] text-[#0b376c]">
@@ -204,39 +211,21 @@ export function EmailConfirmationScreen() {
               </Text>
             </View>
 
-            {/* Check Confirmation Button */}
-            <TouchableOpacity
+            <Button
+              title="I've confirmed my email"
+              loading={checking}
+              disabled={!supabaseAvailable}
               onPress={checkEmailConfirmation}
-              disabled={checking || !supabaseAvailable}
-              className={`mt-4 h-11 items-center justify-center rounded-full border border-[#c3d2eb] bg-[#e6edf9] ${
-                checking || !supabaseAvailable ? "opacity-50" : ""
-              }`}
-            >
-              {checking ? (
-                <ActivityIndicator color="#0b376c" />
-              ) : (
-                <Text className="text-sm font-semibold text-[#9aa8c6]">
-                  I've Confirmed My Email
-                </Text>
-              )}
-            </TouchableOpacity>
-
-            {/* Resend Email Button */}
-            <TouchableOpacity
+              className="mt-4"
+            />
+            <Button
+              title="Resend confirmation email"
+              variant="secondary"
+              loading={resending}
+              disabled={!supabaseAvailable}
               onPress={resendConfirmationEmail}
-              disabled={resending || !supabaseAvailable}
-              className={`mt-3 h-11 items-center justify-center rounded-full border border-[#1b4f8f]/40 bg-white ${
-                resending || !supabaseAvailable ? "opacity-50" : ""
-              }`}
-            >
-              {resending ? (
-                <ActivityIndicator color="#0b376c" />
-              ) : (
-                <Text className="text-sm font-semibold text-[#0b376c]">
-                  Resend Confirmation Email
-                </Text>
-              )}
-            </TouchableOpacity>
+              className="mt-3"
+            />
 
             {/* Back to Login */}
             <View className="mt-8 items-center">

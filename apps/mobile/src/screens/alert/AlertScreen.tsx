@@ -3,6 +3,7 @@ import { useState, useRef } from "react";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { StatusBar } from "expo-status-bar";
 import * as Location from "expo-location";
 import type { RootStackParamList } from "@/navigation/types";
 import { useCreateAlert } from "./hooks/useCreateAlert";
@@ -83,7 +84,8 @@ export function AlertScreen() {
 
             if (alertData) {
               // Navigate to AlertScreen2 with alert ID
-              navigation.navigate("Alert2", { alertId: alertData.id });
+              // Replace so the live screen can't go "back" to the slider
+              navigation.replace("Alert2", { alertId: alertData.id });
             } else {
               // Reset slider if alert creation failed
               Animated.spring(pan, {
@@ -117,6 +119,7 @@ export function AlertScreen() {
 
   return (
     <View className="flex-1 bg-[#0b376c]">
+      <StatusBar style="light" />
       {/* Modal */}
       <View className="flex-1 justify-center items-center px-6">
         <View className="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl">

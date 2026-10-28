@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { RootStackParamList } from "@/navigation/types";
 import { useAnalyzePhoto } from "./hooks/useAnalyzePhoto";
 
@@ -18,6 +19,7 @@ export function ReportScreen2() {
   const { imageUri, latitude, longitude, timestamp, locationName } = route.params;
   const { analyzePhoto, loading: analyzingPhoto } = useAnalyzePhoto();
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const insets = useSafeAreaInsets();
 
   const handleRetake = () => {
     navigation.goBack();
@@ -68,9 +70,9 @@ export function ReportScreen2() {
   }
 
   return (
-    <View className="flex-1 bg-white pt-20">
+    <View className="flex-1 bg-white" style={{ paddingTop: insets.top }}>
       {/* Image preview with grid overlay */}
-      <View className="flex-1 relative mt-10">
+      <View className="flex-1 relative">
         <Image
           source={{ uri: imageUri }}
           style={StyleSheet.absoluteFillObject}
@@ -102,7 +104,10 @@ export function ReportScreen2() {
       </View>
 
       {/* Bottom buttons */}
-      <View className="absolute bottom-8 left-0 right-0 px-6 pb-8 flex-row items-center justify-between">
+      <View
+        className="absolute left-0 right-0 px-6 flex-row items-center justify-between"
+        style={{ bottom: insets.bottom + 32 }}
+      >
         {/* Retake button - circular, light blue-grey */}
         <TouchableOpacity
           onPress={handleRetake}

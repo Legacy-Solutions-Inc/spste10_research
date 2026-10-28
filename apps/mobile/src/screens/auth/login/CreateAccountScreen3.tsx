@@ -1,7 +1,6 @@
 import {
   View,
   Text,
-  TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
   TextInput,
@@ -10,7 +9,9 @@ import {
 import { useState } from "react";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { RootStackParamList } from "@/navigation/types";
+import { Button } from "@/components/ui/Button";
 import { useSignUp } from "./hooks/useSignUp";
 import { SupabaseWarning } from "./components/SupabaseWarning";
 
@@ -22,6 +23,7 @@ export function CreateAccountScreen() {
   const [contactNumber, setContactNumber] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const insets = useSafeAreaInsets();
 
   const { signUp, loading: signUpLoading, supabaseAvailable } = useSignUp();
 
@@ -61,7 +63,10 @@ export function CreateAccountScreen() {
         className="flex-1 justify-end"
       >
         <View className="flex-1 px-2 pt-40">
-          <View className="flex-1 rounded-t-3xl bg-[#f5f6fa] px-4 pt-10 pb-8">
+          <View
+            className="flex-1 rounded-t-3xl bg-surface px-4 pt-10"
+            style={{ paddingBottom: insets.bottom + 24 }}
+          >
             {/* Brand */}
             <View className="items-center mb-4">
               <Text className="text-4xl font-extrabold tracking-[0.35em] text-[#0b376c]">
@@ -156,18 +161,14 @@ export function CreateAccountScreen() {
               />
             </View>
 
-            {/* Create Account button */}
-            <TouchableOpacity
+            <Button
+              title="Create account"
+              loadingTitle="Creating account…"
+              loading={signUpLoading}
+              disabled={!supabaseAvailable}
               onPress={handleCreateAccount}
-              disabled={loading || !supabaseAvailable}
-              className={`mt-2 h-11 items-center justify-center rounded-full border border-[#c3d2eb] bg-[#e6edf9] ${
-                loading || !supabaseAvailable ? "opacity-50" : ""
-              }`}
-            >
-              <Text className="text-sm font-semibold text-[#9aa8c6]">
-                {signUpLoading ? "Creating..." : "Create Account"}
-              </Text>
-            </TouchableOpacity>
+              className="mt-2"
+            />
 
             {/* Bottom text - Already have an account? */}
             <View className="mt-8 items-center">

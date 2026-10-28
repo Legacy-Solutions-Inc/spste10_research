@@ -1,9 +1,7 @@
 import { View, Text, ScrollView, Image, TouchableOpacity } from "react-native";
-import React, { useEffect, useState } from "react";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { supabase, isSupabaseConfigured } from "@/lib/supabase";
-import type { Session } from "@supabase/supabase-js";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import type { RootStackParamList } from "@/navigation/types";
 import { useGetProfile } from "@/screens/settingsOptions/hooks/useGetProfile";
@@ -12,9 +10,7 @@ type HomeNavigation = NativeStackNavigationProp<RootStackParamList, "Home">;
 
 export function HomeScreen() {
   const navigation = useNavigation<HomeNavigation>();
-  const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
-  const supabaseAvailable = isSupabaseConfigured();
+  const insets = useSafeAreaInsets();
   const { profileData, loading: loadingProfile } = useGetProfile();
 
   // Helper function to get display name with priority order
@@ -40,49 +36,15 @@ export function HomeScreen() {
     return "User";
   };
 
-  useEffect(() => {
-    if (!supabaseAvailable) {
-      setLoading(false);
-      return;
-    }
-
-    // Check if Supabase is available
-    const checkSupabase = async () => {
-      try {
-        const result = await supabase!.auth.getSession();
-        setSession(result.data?.session || null);
-      } catch (err) {
-        console.error("Error checking session:", err);
-        setSession(null);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    checkSupabase();
-
-    const {
-      data: { subscription },
-    } = supabase!.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [supabaseAvailable]);
-
-  if (loading) {
-    return (
-      <View className="flex-1 justify-center items-center bg-gray-100">
-        <Text className="text-3xl font-bold text-gray-900">Loading...</Text>
-      </View>
-    );
-  }
-
   return (
-    <ScrollView className="flex-1 bg-white">
-      <View className="pt-20">
+    <ScrollView
+      className="flex-1 bg-white"
+      contentContainerStyle={{
+        paddingTop: insets.top + 24,
+        paddingBottom: insets.bottom + 24,
+      }}
+    >
+      <View>
        
         {/* Header */}
         <View className="flex-row items-center justify-between mb-10 px-4">
@@ -111,7 +73,12 @@ export function HomeScreen() {
               </Text>
             </View>
           </View>
-          <TouchableOpacity onPress={() => navigation.navigate("Settings1")}>
+          <TouchableOpacity
+            onPress={() => navigation.navigate("Settings1")}
+            accessibilityRole="button"
+            accessibilityLabel="Settings"
+            hitSlop={8}
+          >
             <MaterialCommunityIcons
               name="cog-outline"
               size={35}
@@ -179,16 +146,6 @@ export function HomeScreen() {
           </TouchableOpacity>
           
         </View>
-        {/* Footer */}
-      <View className="bg-blue-900 h-16 rounded-t-xl items-center justify-center">
-        <View className="h-12 w-12 rounded-full bg-white/20 items-center justify-center">
-          <MaterialCommunityIcons
-            name="reddit"
-            size={40}
-            color="white"
-          />
-        </View>
-      </View>
       </View>
     </ScrollView>
   );

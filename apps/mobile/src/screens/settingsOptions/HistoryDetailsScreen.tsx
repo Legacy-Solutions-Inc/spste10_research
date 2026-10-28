@@ -1,9 +1,11 @@
-import { View, Text, TouchableOpacity, ScrollView, Image, ActivityIndicator } from "react-native";
+import { View, Text, ScrollView, Image, ActivityIndicator } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import type { RootStackParamList } from "@/navigation/types";
 import { useGetAlert } from "./hooks/useGetAlert";
+import { Screen } from "@/components/ui/Screen";
+import { ScreenHeader } from "@/components/ui/ScreenHeader";
 
 type HistoryDetailsNavigation = NativeStackNavigationProp<
   RootStackParamList,
@@ -71,21 +73,8 @@ export function HistoryDetailsScreen() {
   };
 
   return (
-    <View className="flex-1 bg-white">
-      {/* Header */}
-      <View className="flex-row items-center px-4 pt-20 pb-4">
-        <TouchableOpacity
-          onPress={() => navigation.navigate("History")}
-          className="h-12 w-12 rounded-full bg-blue-900 items-center justify-center mr-4"
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          activeOpacity={0.7}
-        >
-          <MaterialCommunityIcons name="arrow-left" size={24} color="white" />
-        </TouchableOpacity>
-        <Text className="text-xl font-bold text-blue-900 flex-1 text-center -ml-14">
-          History
-        </Text>
-      </View>
+    <Screen edges={["top"]}>
+      <ScreenHeader title="Details" onBack={() => navigation.goBack()} />
 
       {/* Content */}
       <ScrollView className="flex-1">
@@ -215,17 +204,7 @@ export function HistoryDetailsScreen() {
         </View>
       </ScrollView>
 
-      {/* Footer */}
-      <View className="bg-blue-900 h-16 rounded-t-xl items-center justify-center">
-        <View className="h-12 w-12 rounded-full bg-white/20 items-center justify-center">
-          <MaterialCommunityIcons
-            name="alert-octagon"
-            size={32}
-            color="white"
-          />
-        </View>
-      </View>
-    </View>
+    </Screen>
   );
 }
 

@@ -3,6 +3,8 @@ import { useState } from "react";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "@/navigation/types";
+import { useHardwareBack } from "@/navigation/useHardwareBack";
+import { Screen } from "@/components/ui/Screen";
 import { CancelAlertModal } from "@/components/CancelAlertModal";
 import { useCancelAlert } from "./hooks/useCancelAlert";
 
@@ -14,23 +16,25 @@ export function AlertScreen3() {
   const route = useRoute<Alert3Route>();
   const alertId = route.params?.alertId;
   const [showCancelModal, setShowCancelModal] = useState(false);
+  // Leaving a live incident must go through Cancel
+  useHardwareBack();
   const { cancelAlert, loading: cancelLoading } = useCancelAlert();
 
   const handleCancel = async () => {
     if (!alertId) {
-      navigation.navigate("Home");
+      navigation.popToTop();
       return;
     }
 
     setShowCancelModal(false);
     const success = await cancelAlert(alertId);
     if (success) {
-      navigation.navigate("Home");
+      navigation.popToTop();
     }
   };
 
   return (
-    <View className="flex-1 bg-white pt-12">
+    <Screen>
       <View className="flex-1 justify-center items-center px-6">
         {/* Main text content - centered */}
         <View className="items-center mb-8">
@@ -67,7 +71,7 @@ export function AlertScreen3() {
         onConfirm={handleCancel}
         onCancel={() => setShowCancelModal(false)}
       />
-    </View>
+    </Screen>
   );
 }
 

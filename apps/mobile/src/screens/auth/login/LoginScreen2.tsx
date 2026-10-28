@@ -10,9 +10,10 @@ import {
 import { useState } from "react";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { RootStackParamList } from "@/navigation/types";
+import { Button } from "@/components/ui/Button";
 import { useLogin } from "./hooks/useLogin";
-import { useSignUp } from "./hooks/useSignUp";
 import { SupabaseWarning } from "./components/SupabaseWarning";
 
 export function LoginScreen2() {
@@ -20,17 +21,11 @@ export function LoginScreen2() {
     useNavigation<NativeStackNavigationProp<RootStackParamList, "Login2">>();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const { login, loading: loginLoading, supabaseAvailable } = useLogin();
-  const { signUp, loading: signUpLoading } = useSignUp();
-
-  const loading = loginLoading || signUpLoading;
+  const insets = useSafeAreaInsets();
+  const { login, loading, supabaseAvailable } = useLogin();
 
   const handleLogin = () => {
     login(email, password);
-  };
-
-  const handleSignUp = () => {
-    signUp(email, password);
   };
 
   return (
@@ -45,7 +40,10 @@ export function LoginScreen2() {
         className="flex-1 justify-end"
       >
         <View className="flex-1 px-2 pt-40">
-          <View className="flex-1 rounded-t-3xl bg-[#f5f6fa] px-4 pt-10">
+          <View
+            className="flex-1 rounded-t-3xl bg-surface px-4 pt-10"
+            style={{ paddingBottom: insets.bottom + 24 }}
+          >
             {/* Brand */}
           <View className="items-center mb-6">
             <Text className="text-4xl font-extrabold tracking-[0.35em] text-[#0b376c]">
@@ -106,18 +104,14 @@ export function LoginScreen2() {
             </TouchableOpacity>
           </View>
 
-          {/* Log in button */}
-          <TouchableOpacity
+          <Button
+            title="Log in"
+            loadingTitle="Logging in…"
+            loading={loading}
+            disabled={!supabaseAvailable}
             onPress={handleLogin}
-            disabled={loading || !supabaseAvailable}
-            className={`mt-4 h-11 items-center justify-center rounded-full border border-[#c3d2eb] bg-[#e6edf9] ${
-              loading || !supabaseAvailable ? "opacity-50" : ""
-            }`}
-          >
-            <Text className="text-sm font-semibold text-[#9aa8c6]">
-              {loginLoading ? "Logging in..." : "Log in"}
-            </Text>
-          </TouchableOpacity>
+            className="mt-4"
+          />
 
             {/* Bottom text */}
             <View className="mt-8 items-center">

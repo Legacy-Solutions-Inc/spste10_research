@@ -1,15 +1,9 @@
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  KeyboardAvoidingView,
-  Platform,
-  ImageBackground,
-} from "react-native";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { View, Text, ImageBackground } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { RootStackParamList } from "@/navigation/types";
+import { Button } from "@/components/ui/Button";
 
 type LoginNavigation = NativeStackNavigationProp<
   RootStackParamList,
@@ -18,12 +12,10 @@ type LoginNavigation = NativeStackNavigationProp<
 
 export function LoginScreen1() {
   const navigation = useNavigation<LoginNavigation>();
+  const insets = useSafeAreaInsets();
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      className="flex-1 bg-black"
-    >
+    <View className="flex-1 bg-black">
       {/* Background image */}
       <ImageBackground
         source={require("../../../../assets/loginpage.png")}
@@ -31,46 +23,38 @@ export function LoginScreen1() {
         className="flex-1 justify-end"
       >
         {/* Foreground card */}
-        <View className="mx-4 mb-6 rounded-t-3xl bg-white px-6 pt-8 pb-10 shadow-lg">
+        <View
+          className="mx-4 rounded-3xl bg-white px-6 pt-8 pb-6 shadow-lg"
+          style={{ marginBottom: insets.bottom + 16 }}
+        >
             {/* Welcome copy */}
             <View className="mb-8 items-center">
               <Text className="text-sm font-semibold text-black">
                 Welcome to
               </Text>
-              <Text className="mt-1 text-3xl font-extrabold tracking-[0.25em] text-[#0b376c]">
+              <Text className="mt-1 text-3xl font-extrabold tracking-[0.25em] text-navy">
                 AGAP
               </Text>
-              <Text className="mt-3 text-xs text-gray-700">
+              <Text className="mt-3 text-xs text-ink-muted">
                 Safe. Secure.
               </Text>
-              <Text className="text-xs text-gray-700">
+              <Text className="text-xs text-ink-muted">
                 Always with you.
               </Text>
             </View>
 
-            {/* Primary CTA */}
-            <TouchableOpacity
-              className="mb-4 h-12 items-center justify-center rounded-full bg-blue-900 shadow-md"
+            <Button
+              title="Create an account"
               onPress={() => navigation.navigate("Login3")}
-            >
-              <Text className="text-sm font-semibold text-white">
-                Create an account
-              </Text>
-            </TouchableOpacity>
-
-            {/* Secondary CTA */}
-            <TouchableOpacity
+              className="mb-3"
+            />
+            <Button
+              title="I already have an account"
+              variant="ghost"
               onPress={() => navigation.navigate("Login2")}
-              className="items-center mb-6"
-            >
-              <Text className="text-xs font-semibold text-blue-900">
-                Already have an account
-              </Text>
-            </TouchableOpacity>
-
-            {/* Divider */}
+            />
         </View>
       </ImageBackground>
-    </KeyboardAvoidingView>
+    </View>
   );
 }

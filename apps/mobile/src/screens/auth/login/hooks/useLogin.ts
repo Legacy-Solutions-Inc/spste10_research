@@ -1,14 +1,10 @@
 import { useState } from "react";
 import { Alert } from "react-native";
-import { useNavigation } from "@react-navigation/native";
-import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
-import type { RootStackParamList } from "@/navigation/types";
-
-type NavigationProp = NativeStackNavigationProp<RootStackParamList, "Home">;
+import { useAuth, hasMobileAccess, denyMobileAccess } from "@/lib/auth";
 
 export function useLogin() {
-  const navigation = useNavigation<NavigationProp>();
+  const { admit } = useAuth();
   const [loading, setLoading] = useState(false);
   const supabaseAvailable = isSupabaseConfigured();
 
@@ -39,33 +35,14 @@ export function useLogin() {
       }
 
       if (data.session) {
-        // Check user role
-        const { data: profile, error: profileError } = await supabase!
-          .from("profiles")
-          .select("role")
-          .eq("id", data.user.id)
-          .single();
-
-        if (profileError) {
-          Alert.alert("Error", "Failed to verify account. Please try again.");
-          await supabase!.auth.signOut();
-          return false;
-        }
-
-        const userRole = profile?.role;
-        
         // Block responder and admin roles from mobile app
-        if (userRole === "responder" || userRole === "admin") {
-          await supabase!.auth.signOut();
-          Alert.alert(
-            "Access Denied",
-            "This account is for responders only. Please use the web application to log in."
-          );
+        if (!(await hasMobileAccess(data.user.id))) {
+          await denyMobileAccess();
           return false;
         }
 
-        // Allow user role to proceed
-        navigation.replace("Home");
+        // The navigator switches to Home once the user is admitted
+        admit(data.user.id);
         return true;
       }
       return false;
@@ -80,4 +57,3 @@ export function useLogin() {
 
   return { login, loading, supabaseAvailable };
 }
-

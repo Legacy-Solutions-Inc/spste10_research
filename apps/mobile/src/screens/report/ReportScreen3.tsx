@@ -2,6 +2,7 @@ import { View, Text, TouchableOpacity, Image, StyleSheet, ScrollView, ActivityIn
 import { useState } from "react";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { RootStackParamList } from "@/navigation/types";
 import { useUploadReportImage } from "./hooks/useUploadReportImage";
 import { useCreateReport } from "./hooks/useCreateReport";
@@ -17,6 +18,15 @@ export function ReportScreen3() {
   const route = useRoute<Report3RouteProp>();
   const { imageUri, latitude, longitude, timestamp: timestampString, locationName, aiDescription } = route.params;
   const [isSending, setIsSending] = useState(false);
+  const insets = useSafeAreaInsets();
+
+  // Drop the camera/review screens so the live screen sits directly on Home
+  const goToLiveReport = (reportId: string) => {
+    navigation.reset({
+      index: 1,
+      routes: [{ name: "Home" }, { name: "Report4", params: { reportId } }],
+    });
+  };
   
   // Convert timestamp string back to Date
   const timestamp = new Date(timestampString);
@@ -73,7 +83,7 @@ export function ReportScreen3() {
       if (!imageUrl) {
         // If upload fails, navigate anyway - the report exists without image
         // In production, you might want to delete the report or show an error
-        navigation.navigate("Report4", { reportId: tempReportData.id });
+        goToLiveReport(tempReportData.id);
         setIsSending(false);
         return;
       }
@@ -93,7 +103,7 @@ export function ReportScreen3() {
       }
       
       // Navigate to ReportScreen4 with report ID
-      navigation.navigate("Report4", { reportId: tempReportData.id });
+      goToLiveReport(tempReportData.id);
     } catch (error) {
       console.error("Error sending report:", error);
       setIsSending(false);
@@ -104,9 +114,15 @@ export function ReportScreen3() {
   const description = aiDescription || "Emergency photo submitted. Description not available.";
 
   return (
-    <ScrollView className="flex-1 bg-white">
+    <ScrollView
+      className="flex-1 bg-white"
+      contentContainerStyle={{
+        paddingTop: insets.top + 16,
+        paddingBottom: insets.bottom,
+      }}
+    >
       {/* Title */}
-      <Text className="text-2xl font-bold text-blue-900 text-center mt-20">
+      <Text className="text-2xl font-bold text-blue-900 text-center">
         Report
       </Text>
 

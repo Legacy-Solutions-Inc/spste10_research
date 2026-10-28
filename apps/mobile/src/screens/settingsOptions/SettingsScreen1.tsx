@@ -1,9 +1,12 @@
-import { View, Text, TouchableOpacity, Pressable, Alert } from "react-native";
+import { View, Text, Pressable, Alert } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import type { RootStackParamList } from "@/navigation/types";
+import { Screen } from "@/components/ui/Screen";
+import { ScreenHeader } from "@/components/ui/ScreenHeader";
+import { Button } from "@/components/ui/Button";
 
 type Settings1Navigation = NativeStackNavigationProp<
   RootStackParamList,
@@ -14,27 +17,8 @@ export function SettingsScreen1() {
   const navigation = useNavigation<Settings1Navigation>();
 
   return (
-    <View className="flex-1 bg-white pt-20">
-      {/* Top Header */}
-      <View className="flex-row items-center space-x-4 mt-4 px-4 mb-6">
-        {/* Back button */}
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          className="h-12 w-12 rounded-full bg-blue-900 items-center justify-center"
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          activeOpacity={0.7}
-        >
-          <MaterialCommunityIcons name="arrow-left" size={24} color="white" />
-        </TouchableOpacity>
-
-        {/* Title */}
-        <Text className="text-lg font-bold text-blue-900 flex-1 text-center">
-          Settings
-        </Text>
-
-        {/* Spacer to balance the layout */}
-        <View className="w-10" />
-      </View>
+    <Screen>
+      <ScreenHeader title="Settings" onBack={() => navigation.goBack()} />
 
       {/* List Options */}
       <View className="mt-6 space-y-4">
@@ -66,29 +50,23 @@ export function SettingsScreen1() {
       </View>
 
       {/* Logout Button at the bottom */}
-      <View className="flex-1 justify-end pb-8 px-4">
-        <TouchableOpacity
+      <View className="flex-1 justify-end px-4 pb-6">
+        <Button
+          title="Log out"
+          variant="secondary"
           onPress={async () => {
+            // The navigator returns to the welcome screen on sign-out
             if (isSupabaseConfigured() && supabase) {
-              try {
-                await supabase.auth.signOut();
-                navigation.navigate("Login1");
-              } catch (error) {
-                Alert.alert("Error", "Failed to logout");
+              const { error } = await supabase.auth.signOut();
+              if (error) {
+                Alert.alert("Error", "Failed to log out");
                 console.error("Logout error:", error);
               }
-            } else {
-              // If Supabase is not configured, just navigate to login
-              navigation.navigate("Login1");
             }
           }}
-          className="bg-blue-900 rounded-full py-3 px-6 items-center"
-          activeOpacity={0.8}
-        >
-          <Text className="text-white font-bold text-base">Logout</Text>
-        </TouchableOpacity>
+        />
       </View>
-    </View>
+    </Screen>
   );
 }
 
