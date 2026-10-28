@@ -1,190 +1,180 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   History,
   Settings,
-  Shield,
+  Users,
   LogOut,
-  Menu,
-  X,
+  PanelLeftClose,
+  PanelLeftOpen,
+  type LucideIcon,
 } from "lucide-react";
 import { createClient } from "@/lib/supabaseBrowser";
+import { useCurrentProfile } from "@/hooks/useCurrentProfile";
+import { LogoMark } from "@/components/brand/Logo";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
+
+const COLLAPSED_KEY = "agap:sidebar-collapsed";
+
+interface NavItem {
+  name: string;
+  path: string;
+  icon: LucideIcon;
+}
+
+const RESPONDER_NAV: NavItem[] = [
+  { name: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
+  { name: "History", path: "/history", icon: History },
+  { name: "Settings", path: "/settings", icon: Settings },
+];
+
+const ADMIN_NAV: NavItem[] = [
+  { name: "Responder accounts", path: "/admin", icon: Users },
+  { name: "Settings", path: "/settings", icon: Settings },
+];
+
+function initials(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
+}
+
+/** Wraps a rail item in a tooltip only while the rail is collapsed. */
+function RailTooltip({ label, collapsed, children }: { label: string; collapsed: boolean; children: ReactNode }) {
+  if (!collapsed) return <>{children}</>;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent side="right">{label}</TooltipContent>
+    </Tooltip>
+  );
+}
 
 export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const [userName, setUserName] = useState<string | null>(null);
-  const [municipality, setMunicipality] = useState<string | null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const profile = useCurrentProfile();
+  const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
-    const fetchUserData = async () => {
-      const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (user) {
-        try {
-          // Fetch profile data
-          // @ts-ignore - Supabase types may not be fully generated
-          const { data: profileRaw } = await supabase
-            .from("profiles")
-            .select("full_name, role")
-            .eq("id", user.id)
-            .single();
-
-          // Type assertion for profile data
-          type ProfileData = {
-            full_name: string | null;
-            role: string | null;
-          } | null;
-
-          const profile = profileRaw as ProfileData;
-
-          // Check if user is admin
-          const userIsAdmin = profile?.role === "admin";
-          setIsAdmin(userIsAdmin);
-
-          // Try to fetch responder profile for municipality
-          let fetchedMunicipality: string | null = null;
-          try {
-            // @ts-ignore - Supabase types may not be fully generated
-            const { data: responderProfileRaw } = await supabase
-              .from("responder_profiles")
-              .select("municipality")
-              .eq("id", user.id)
-              .single();
-
-            type ResponderProfileData = {
-              municipality: string | null;
-            } | null;
-
-            const responderProfile = responderProfileRaw as ResponderProfileData;
-
-            if (responderProfile?.municipality) {
-              fetchedMunicipality = responderProfile.municipality;
-              setMunicipality(responderProfile.municipality);
-            }
-          } catch {
-            // Responder profile might not exist - that's okay
-          }
-
-          // Set user name with fallback priority: full_name > email
-          if (profile?.full_name) {
-            setUserName(profile.full_name);
-          } else {
-            setUserName(user.email?.split("@")[0] || "User");
-          }
-        } catch {
-          // Profiles table might not exist, use email as fallback
-          setUserName(user.email?.split("@")[0] || "User");
-          setIsAdmin(false);
-        }
-      }
-    };
-
-    fetchUserData();
+    try {
+      setCollapsed(localStorage.getItem(COLLAPSED_KEY) === "1");
+    } catch {
+      // Storage can be unavailable (private mode); the rail just starts expanded
+    }
   }, []);
+
+  const toggleCollapsed = () => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(COLLAPSED_KEY, next ? "1" : "0");
+      } catch {
+        // Ignore: preference simply won't persist
+      }
+      return next;
+    });
+  };
 
   const handleLogout = async () => {
     const supabase = createClient();
     await supabase.auth.signOut();
     router.push("/");
+    router.refresh();
   };
 
-  const navItems = [
-    { name: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
-    { name: "History", path: "/history", icon: History },
-    { name: "Settings", path: "/settings", icon: Settings },
-    ...(isAdmin ? [{ name: "Admin", path: "/admin", icon: Shield }] : []),
-  ];
-
-  // Display full_name from profiles table (highest priority)
-  const responderInfo = userName || "User";
+  const navItems = profile?.role === "admin" ? ADMIN_NAV : RESPONDER_NAV;
+  const subtitle =
+    profile?.role === "admin"
+      ? "Administrator"
+      : [profile?.municipality, profile?.province].filter(Boolean).join(", ") || "Response office";
 
   return (
-    <>
-      {/* Mobile Toggle Button */}
-      <button
-        onClick={() => setIsMobileOpen(!isMobileOpen)}
-        className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-blue-900 text-white rounded-md hover:bg-blue-800 transition-colors"
-        aria-label="Toggle sidebar"
-      >
-        {isMobileOpen ? (
-          <X className="w-6 h-6" />
-        ) : (
-          <Menu className="w-6 h-6" />
-        )}
-      </button>
-
-      {/* Mobile Overlay */}
-      {isMobileOpen && (
-        <div
-          className="lg:hidden fixed inset-0 bg-black/50 z-40 transition-opacity"
-          onClick={() => setIsMobileOpen(false)}
-          aria-hidden="true"
-        />
+    <aside
+      className={cn(
+        "sticky top-0 z-40 flex h-screen shrink-0 flex-col bg-sidebar text-sidebar-foreground transition-[width] duration-200",
+        collapsed ? "w-16" : "w-60"
       )}
+      aria-label="Main navigation"
+    >
+      <div className={cn("flex h-16 items-center gap-2.5", collapsed ? "justify-center px-0" : "px-5")}>
+        <LogoMark inverted />
+        {!collapsed && <span className="text-lg font-bold tracking-tight">AGAP</span>}
+      </div>
 
-      {/* Sidebar */}
-      <aside
-        className={`fixed lg:sticky top-0 left-0 h-screen w-64 bg-gradient-to-b from-blue-900 via-blue-800 to-blue-900 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 text-white flex flex-col z-40 transition-transform duration-300 ease-in-out flex-shrink-0 ${
-          isMobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
-        }`}
-      >
-        {/* AGAP Logo/Title */}
-        <div className="p-6 border-b border-blue-800/50 dark:border-slate-700/50">
-          <h1 className="text-2xl font-bold">AGAP</h1>
-          {responderInfo && (
-            <p className="text-sm text-blue-200/80 dark:text-slate-300/80 mt-2">
-              {responderInfo}
-            </p>
-          )}
-        </div>
-
-        {/* Navigation Items */}
-        <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-          {navItems.map((item) => {
-            const isActive = pathname === item.path;
-            const IconComponent = item.icon;
-            return (
+      <nav className={cn("flex-1 space-y-1 overflow-y-auto py-2", collapsed ? "px-2" : "px-3")}>
+        {navItems.map((item) => {
+          const isActive = pathname === item.path || pathname.startsWith(`${item.path}/`);
+          const Icon = item.icon;
+          return (
+            <RailTooltip key={item.path} label={item.name} collapsed={collapsed}>
               <Link
-                key={item.path}
                 href={item.path}
-                onClick={() => setIsMobileOpen(false)}
-                className={`flex items-center gap-3 px-4 py-3 rounded-md transition-colors duration-200 font-medium text-sm ${
-                  isActive
-                    ? "bg-blue-800/50 dark:bg-slate-700/50 text-white border-l-4 border-blue-400"
-                    : "text-blue-200 dark:text-slate-300 hover:bg-blue-800/30 dark:hover:bg-slate-700/30"
-                }`}
                 aria-current={isActive ? "page" : undefined}
+                className={cn(
+                  "flex h-10 items-center gap-3 rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60",
+                  collapsed ? "justify-center px-0" : "px-3",
+                  isActive
+                    ? "bg-sidebar-accent text-white"
+                    : "text-sidebar-muted hover:bg-white/5 hover:text-white"
+                )}
               >
-                <IconComponent className="w-5 h-5 flex-shrink-0" />
-                <span>{item.name}</span>
+                <Icon className="h-[18px] w-[18px] shrink-0" />
+                {!collapsed && <span className="truncate">{item.name}</span>}
+                {collapsed && <span className="sr-only">{item.name}</span>}
               </Link>
-            );
-          })}
-        </nav>
+            </RailTooltip>
+          );
+        })}
+      </nav>
 
-        {/* Logout Button */}
-        <div className="p-4 border-t border-blue-800/50 dark:border-slate-700/50">
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-md text-blue-200 dark:text-slate-300 hover:bg-blue-800/30 dark:hover:bg-slate-700/30 transition-colors duration-200 font-medium text-sm"
-            aria-label="Log out"
-          >
-            <LogOut className="w-5 h-5 flex-shrink-0" />
-            <span>Logout</span>
-          </button>
+      <div className={cn("border-t border-white/10 py-3", collapsed ? "px-2" : "px-3")}>
+        {profile && !collapsed && (
+          <div className="mb-2 flex items-center gap-3 px-2 py-1.5">
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/10 text-xs font-semibold">
+              {initials(profile.name)}
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium">{profile.name}</p>
+              <p className="truncate text-xs text-sidebar-muted">{subtitle}</p>
+            </div>
+          </div>
+        )}
+        <div className={cn("flex gap-1", collapsed ? "flex-col items-center" : "items-center")}>
+          <RailTooltip label="Log out" collapsed={collapsed}>
+            <button
+              onClick={handleLogout}
+              className={cn(
+                "flex h-9 items-center gap-3 rounded-md text-sm font-medium text-sidebar-muted transition-colors hover:bg-white/5 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60",
+                collapsed ? "w-10 justify-center" : "flex-1 px-3"
+              )}
+            >
+              <LogOut className="h-[18px] w-[18px] shrink-0" />
+              {collapsed ? <span className="sr-only">Log out</span> : <span>Log out</span>}
+            </button>
+          </RailTooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={toggleCollapsed}
+                className="grid h-9 w-10 place-items-center rounded-md text-sidebar-muted transition-colors hover:bg-white/5 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+                aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              >
+                {collapsed ? <PanelLeftOpen className="h-[18px] w-[18px]" /> : <PanelLeftClose className="h-[18px] w-[18px]" />}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="right">{collapsed ? "Expand sidebar" : "Collapse sidebar"}</TooltipContent>
+          </Tooltip>
         </div>
-      </aside>
-    </>
+      </div>
+    </aside>
   );
 }
-

@@ -1,7 +1,7 @@
 import type { Config } from "tailwindcss";
+import { fontFamily } from "tailwindcss/defaultTheme";
 
 const config: Config = {
-  darkMode: ["class"],
   content: [
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
@@ -9,6 +9,14 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ["var(--font-sans)", ...fontFamily.sans],
+      },
+      // Type scale: xs 12 / 13 / sm 14 / base 16 / xl 20 / 28
+      fontSize: {
+        "13": ["0.8125rem", { lineHeight: "1.125rem" }],
+        "28": ["1.75rem", { lineHeight: "2.125rem", letterSpacing: "-0.02em" }],
+      },
       colors: {
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
@@ -40,21 +48,46 @@ const config: Config = {
           DEFAULT: "hsl(var(--destructive))",
           foreground: "hsl(var(--destructive-foreground))",
         },
+        sidebar: {
+          DEFAULT: "hsl(var(--sidebar))",
+          foreground: "hsl(var(--sidebar-foreground))",
+          muted: "hsl(var(--sidebar-muted))",
+          accent: "hsl(var(--sidebar-accent))",
+        },
+        // Incident signal colors. Only incidents use these; chrome stays navy and neutral.
+        alert: {
+          DEFAULT: "hsl(var(--alert))",
+          soft: "hsl(var(--alert-soft))",
+        },
+        report: {
+          DEFAULT: "hsl(var(--report))",
+          soft: "hsl(var(--report-soft))",
+        },
+        resolved: {
+          DEFAULT: "hsl(var(--resolved))",
+          soft: "hsl(var(--resolved-soft))",
+        },
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
-        chart: {
-          "1": "hsl(var(--chart-1))",
-          "2": "hsl(var(--chart-2))",
-          "3": "hsl(var(--chart-3))",
-          "4": "hsl(var(--chart-4))",
-          "5": "hsl(var(--chart-5))",
-        },
       },
       borderRadius: {
+        xl: "calc(var(--radius) + 4px)",
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
+      },
+      boxShadow: {
+        panel: "0 1px 2px hsl(222 47% 11% / 0.06), 0 8px 24px -6px hsl(222 47% 11% / 0.14)",
+      },
+      keyframes: {
+        "row-arrive": {
+          from: { backgroundColor: "hsl(var(--alert-soft))" },
+          to: { backgroundColor: "transparent" },
+        },
+      },
+      animation: {
+        "row-arrive": "row-arrive 2.4s ease-out",
       },
     },
   },
@@ -62,4 +95,3 @@ const config: Config = {
 };
 
 export default config;
-
