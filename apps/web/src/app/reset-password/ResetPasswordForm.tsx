@@ -4,12 +4,13 @@ import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabaseBrowser";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Lock, Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
+import { AuthField } from "@/components/auth/AuthField";
+import { BackToSignIn } from "@/components/auth/BackToSignIn";
+import { FormNotice } from "@/components/auth/FormNotice";
+import { PasswordInput } from "@/components/auth/PasswordInput";
 
 type Status = "verifying" | "ready" | "invalid" | "done";
 
@@ -71,12 +72,12 @@ export default function ResetPasswordForm() {
     setError("");
 
     if (password.length < 6) {
-      setError("Password must be at least 6 characters");
+      setError("Use at least 6 characters.");
       return;
     }
 
     if (password !== confirmPassword) {
-      setError("Passwords do not match");
+      setError("Passwords don't match.");
       return;
     }
 
@@ -86,7 +87,7 @@ export default function ResetPasswordForm() {
       const { error: updateError } = await supabase.auth.updateUser({ password });
 
       if (updateError) {
-        const errorMessage = updateError.message || "Failed to update password. Please try again.";
+        const errorMessage = updateError.message || "Couldn't update your password. Try again in a moment.";
         setError(errorMessage);
         toast({
           description: errorMessage,
@@ -101,11 +102,11 @@ export default function ResetPasswordForm() {
       setConfirmPassword("");
       setStatus("done");
       toast({
-        description: "Password updated! You can now log in.",
+        description: "Password updated. Sign in with your new password.",
         variant: "success",
       });
     } catch (err) {
-      const errorMessage = "An unexpected error occurred. Please try again.";
+      const errorMessage = "Couldn't reach AGAP. Check your internet connection and try again.";
       setError(errorMessage);
       toast({
         description: errorMessage,
@@ -117,138 +118,96 @@ export default function ResetPasswordForm() {
   };
 
   return (
-    <Card className="w-full max-w-sm rounded-2xl shadow-md bg-white dark:bg-slate-800 opacity-0 animate-fade-in">
-      <CardHeader className="space-y-1">
-        <CardTitle className="text-2xl font-bold text-slate-900 dark:text-slate-100 text-center">
-          Set a new password
-        </CardTitle>
-        <CardDescription className="text-center">
-          {status === "done"
-            ? "Your password has been changed"
-            : "Choose a new password for your account"}
-        </CardDescription>
-      </CardHeader>
+    <div>
+      <BackToSignIn />
 
-      <CardContent>
-        {status === "verifying" && (
-          <div className="flex items-center justify-center gap-2 py-6 text-sm text-slate-500 dark:text-slate-400">
-            <Loader2 className="w-4 h-4 animate-spin" />
-            Verifying reset link...
-          </div>
-        )}
+      <h1 className="mt-6 text-28 font-semibold text-foreground">Set a new password</h1>
+      <p className="mt-2 text-sm text-muted-foreground">
+        {status === "done" ? "Your password has been changed." : "Choose a new password for your account."}
+      </p>
 
-        {status === "invalid" && (
-          <div className="space-y-4">
-            <p className="flex items-start gap-1.5 text-sm text-red-600 dark:text-red-400">
-              <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-              <span>
-                {linkError || "This reset link is invalid or has expired."} Please request a new
-                one, and open it in the same browser you requested it from.
-              </span>
-            </p>
-            <Link
-              href="/forgot-password"
-              className="inline-flex w-full h-10 items-center justify-center rounded-md px-4 py-2 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
-            >
-              Request a new link
-            </Link>
-          </div>
-        )}
+      {status === "verifying" && (
+        <p role="status" className="mt-8 flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+          Checking your reset link…
+        </p>
+      )}
 
-        {status === "done" && (
-          <p className="flex items-center gap-1.5 text-sm text-green-600 dark:text-green-400">
-            <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
-            Password updated! Log in with your new password.
-          </p>
-        )}
+      {status === "invalid" && (
+        <div className="mt-8 space-y-6">
+          <FormNotice tone="error" title={linkError || "This reset link is invalid or has expired."}>
+            Request a new link, and open it in the same browser you requested it from.
+          </FormNotice>
+          <Button asChild size="lg" className="w-full">
+            <Link href="/forgot-password">Request a new link</Link>
+          </Button>
+        </div>
+      )}
 
-        {status === "ready" && (
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="password" className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                New password
-              </Label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
-                <Input
-                  id="password"
-                  type="password"
-                  name="password"
-                  placeholder="At least 6 characters"
-                  autoComplete="new-password"
-                  minLength={6}
-                  value={password}
-                  onChange={(e) => {
-                    setPassword(e.target.value);
-                    if (error) setError("");
-                  }}
-                  disabled={loading}
-                  className="pl-10"
-                />
-              </div>
-            </div>
+      {status === "done" && (
+        <div className="mt-8 space-y-6">
+          <FormNotice tone="success">Password updated. Sign in with your new password.</FormNotice>
+          <Button asChild size="lg" className="w-full">
+            <Link href="/">Sign in</Link>
+          </Button>
+        </div>
+      )}
 
-            <div className="space-y-2">
-              <Label htmlFor="confirmPassword" className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                Confirm new password
-              </Label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
-                <Input
-                  id="confirmPassword"
-                  type="password"
-                  name="confirmPassword"
-                  placeholder="Re-enter your new password"
-                  autoComplete="new-password"
-                  minLength={6}
-                  value={confirmPassword}
-                  onChange={(e) => {
-                    setConfirmPassword(e.target.value);
-                    if (error) setError("");
-                  }}
-                  disabled={loading}
-                  className={`pl-10 ${
-                    error
-                      ? "border-red-300 focus:ring-red-500 bg-red-50 dark:bg-red-900/20"
-                      : ""
-                  }`}
-                  aria-invalid={error ? "true" : "false"}
-                  aria-describedby={error ? "password-error" : undefined}
-                />
-              </div>
-              {error && (
-                <p
-                  id="password-error"
-                  className="flex items-center gap-1.5 text-sm text-red-600 dark:text-red-400"
-                >
-                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                  {error}
-                </p>
-              )}
-            </div>
+      {status === "ready" && (
+        <form method="post" onSubmit={handleSubmit} noValidate className="mt-8 space-y-5">
+          <AuthField id="password" label="New password" hint={error ? undefined : "At least 6 characters."}>
+            <PasswordInput
+              id="password"
+              name="password"
+              autoComplete="new-password"
+              required
+              minLength={6}
+              value={password}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                if (error) setError("");
+              }}
+              disabled={loading}
+              aria-invalid={error ? true : undefined}
+              aria-describedby={error ? "password-error" : "password-hint"}
+            />
+          </AuthField>
 
-            <Button type="submit" disabled={loading} className="w-full">
-              {loading ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Updating...
-                </>
-              ) : (
-                "Update Password"
-              )}
-            </Button>
-          </form>
-        )}
-      </CardContent>
+          <AuthField id="confirmPassword" label="Confirm new password">
+            <PasswordInput
+              id="confirmPassword"
+              name="confirmPassword"
+              autoComplete="new-password"
+              required
+              minLength={6}
+              value={confirmPassword}
+              onChange={(e) => {
+                setConfirmPassword(e.target.value);
+                if (error) setError("");
+              }}
+              disabled={loading}
+              aria-invalid={error ? true : undefined}
+              aria-describedby={error ? "password-error" : undefined}
+            />
+            {error && (
+              <p id="password-error" className="text-13 text-alert">
+                {error}
+              </p>
+            )}
+          </AuthField>
 
-      <CardFooter className="flex justify-center">
-        <Link
-          href="/login"
-          className="text-sm text-muted-foreground hover:text-slate-900 dark:hover:text-slate-100 hover:underline transition-colors"
-        >
-          Back to login
-        </Link>
-      </CardFooter>
-    </Card>
+          <Button type="submit" size="lg" disabled={loading} className="w-full">
+            {loading ? (
+              <>
+                <Loader2 className="animate-spin" aria-hidden="true" />
+                Updating password…
+              </>
+            ) : (
+              "Update password"
+            )}
+          </Button>
+        </form>
+      )}
+    </div>
   );
 }

@@ -123,7 +123,7 @@ export async function middleware(req: NextRequest) {
         if (accountStatus === "pending" || accountStatus === "rejected") {
           // console.log("[middleware] Responder account not approved:", accountStatus);
           await supabase.auth.signOut();
-          return NextResponse.redirect(new URL("/", req.url));
+          return NextResponse.redirect(new URL(`/?notice=${accountStatus}`, req.url));
         }
       }
     }
