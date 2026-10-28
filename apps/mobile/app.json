@@ -3,13 +3,8 @@
     "name": "AGAP",
     "slug": "mobile",
     "version": "1.0.0",
-    "sdkVersion": "54.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-    "splash": {
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
     "assetBundlePatterns": [
       "**/*"
     ],
@@ -30,6 +25,14 @@
       }
     },
     "plugins": [
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#ffffff",
+          "resizeMode": "contain"
+        }
+      ],
       "@react-native-community/datetimepicker"
     ]
   }

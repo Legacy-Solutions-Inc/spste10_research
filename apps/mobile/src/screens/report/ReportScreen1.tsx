@@ -112,7 +112,7 @@ export function ReportScreen1() {
       <StatusBar style="light" />
       <CameraView
         ref={cameraRef}
-        style={StyleSheet.absoluteFillObject}
+        style={StyleSheet.absoluteFill}
         facing="back"
       />
 

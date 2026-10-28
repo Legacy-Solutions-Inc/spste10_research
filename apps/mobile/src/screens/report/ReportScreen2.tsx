@@ -26,7 +26,7 @@ export function ReportScreen2() {
       <StatusBar style="light" />
       <Image
         source={{ uri: imageUri }}
-        style={StyleSheet.absoluteFillObject}
+        style={StyleSheet.absoluteFill}
         resizeMode="contain"
         accessibilityLabel="Photo you just took"
       />
