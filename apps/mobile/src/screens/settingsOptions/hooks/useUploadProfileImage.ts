@@ -16,11 +16,12 @@ export function useUploadProfileImage() {
       return null;
     }
 
-    // Get current user
+    // Current user from the stored session (no network round trip)
     const {
-      data: { user },
+      data: { session },
       error: userError,
-    } = await supabase!.auth.getUser();
+    } = await supabase!.auth.getSession();
+    const user = session?.user ?? null;
 
     if (userError || !user) {
       Alert.alert("Error", "You must be logged in to upload an image.");

@@ -53,6 +53,12 @@ yarn install
    ```env
    NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
    NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+
+   # Optional: map tiles. Defaults to OpenStreetMap's own tiles, which are fine for
+   # development and demos but not allowed for production traffic. For a pilot, use a
+   # keyed provider (e.g. Stadia Maps or MapTiler free tier):
+   # NEXT_PUBLIC_MAP_TILE_URL=https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png?api_key=YOUR_KEY
+   # NEXT_PUBLIC_MAP_TILE_ATTRIBUTION=&copy; Stadia Maps &copy; OpenMapTiles &copy; OpenStreetMap contributors
    ```
 
    **Mobile app** (`apps/mobile/.env`):

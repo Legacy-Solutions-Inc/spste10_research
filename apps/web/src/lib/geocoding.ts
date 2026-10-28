@@ -34,16 +34,12 @@ export async function geocodeAddress(address: string): Promise<GeocodeResult | n
       `format=json&` +
       `limit=1&` +
       `addressdetails=1`;
-    
-    console.log(`[geocoding] Fetching: ${url}`);
 
     const response = await fetch(url, {
       headers: {
         "User-Agent": "AGAP-WebApp/1.0", // Required by Nominatim
       },
     });
-
-    console.log(`[geocoding] Response status: ${response.status} ${response.statusText}`);
 
     if (!response.ok) {
       console.error(`[geocoding] API error: ${response.status} ${response.statusText}`);
@@ -53,7 +49,6 @@ export async function geocodeAddress(address: string): Promise<GeocodeResult | n
     }
 
     const data = await response.json();
-    console.log(`[geocoding] API returned ${Array.isArray(data) ? data.length : 0} results`);
 
     if (!Array.isArray(data) || data.length === 0) {
       console.warn(`[geocoding] No results found for address: ${normalizedAddress}`);

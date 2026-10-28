@@ -4,91 +4,97 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabaseBrowser";
 import EditableSection from "./components/EditableSection";
 import ChangePasswordSection from "./components/ChangePasswordSection";
+import AlertsSection from "./components/AlertsSection";
 import { validatePhoneNumber, validateTextField } from "./utils/validation";
-import { Card } from "@/components/ui/card";
-import { User, Mail, Lock, MapPin, Phone } from "lucide-react";
-
-interface ProfileData {
-  id?: string;
-  full_name?: string | null;
-  municipality?: string | null;
-  province?: string | null;
-  office_address?: string | null;
-  email?: string | null;
-  contact_number?: string | null;
-}
+import type { SettingsProfile, UserRole } from "./types";
 
 interface SettingsFormProps {
-  initialData: ProfileData | null;
+  initialData: SettingsProfile;
   userEmail: string;
+  role: UserRole | null;
 }
 
-export default function SettingsForm({ initialData, userEmail }: SettingsFormProps) {
+type SupabaseBrowserClient = ReturnType<typeof createClient>;
+
+const SAVE_FAILED = "Nothing was saved. Check your connection and try again.";
+const EMAIL_HELPER = "Used to sign in. It can't be changed here.";
+
+async function requireUserId(supabase: SupabaseBrowserClient): Promise<string> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    throw new Error("Your session has ended. Sign in again, then retry.");
+  }
+  return user.id;
+}
+
+/**
+ * Updates the signed-in responder's own office row. Never inserts: a missing row
+ * means the account wasn't set up as a responder, and creating one here would
+ * file a bogus access request.
+ */
+async function updateOwnResponderProfile(
+  supabase: SupabaseBrowserClient,
+  userId: string,
+  fields: Record<string, string | null>
+): Promise<void> {
+  const { data, error } = await supabase
+    .from("responder_profiles")
+    // @ts-ignore - generated types lack Relationships, so Update resolves to never
+    .update(fields)
+    .eq("id", userId)
+    .select("id");
+
+  if (error) {
+    console.error("Error updating responder profile:", error);
+    throw new Error(SAVE_FAILED);
+  }
+  if (!data || data.length === 0) {
+    throw new Error("We couldn't find your office profile, so nothing was saved. Contact your AGAP administrator.");
+  }
+}
+
+export default function SettingsForm({ initialData, userEmail, role }: SettingsFormProps) {
   const router = useRouter();
+  const isResponder = role === "responder";
+  const email = userEmail || initialData.email || null;
 
   const handleProfileSave = async (updates: Record<string, string | null>) => {
     const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const userId = await requireUserId(supabase);
 
-    if (!user) {
-      throw new Error("User not authenticated. Please log in again.");
-    }
-
-    // Update full_name in profiles table (responder_profiles doesn't have this field)
+    // full_name lives on profiles (responder_profiles doesn't have it)
     if (updates.full_name !== undefined) {
       const { error: profileError } = await supabase
         .from("profiles")
-        // @ts-ignore - Supabase types may not be fully generated
+        // @ts-ignore - generated types lack Relationships, so Update resolves to never
         .update({ full_name: updates.full_name })
-        .eq("id", user.id);
+        .eq("id", userId);
 
       if (profileError) {
-        throw new Error(`Failed to update profile: ${profileError.message}`);
+        console.error("Error updating profile:", profileError);
+        throw new Error(SAVE_FAILED);
       }
     }
 
-    // Build responder profile fields (exclude full_name - it belongs to profiles table)
-    const responderFields: Record<string, string | null> = {};
-    if (updates.municipality !== undefined) responderFields.municipality = updates.municipality;
-    if (updates.province !== undefined) responderFields.province = updates.province;
-    if (updates.office_address !== undefined) responderFields.office_address = updates.office_address;
+    if (isResponder) {
+      const responderFields: Record<string, string | null> = {};
+      if (updates.municipality !== undefined) responderFields.municipality = updates.municipality;
+      if (updates.province !== undefined) responderFields.province = updates.province;
+      if (updates.office_address !== undefined) responderFields.office_address = updates.office_address;
 
-    if (Object.keys(responderFields).length > 0) {
-      // Check if responder profile exists
-      // @ts-ignore - Supabase types may not be fully generated
-      const { data: existingResponderProfile } = await supabase
-        .from("responder_profiles")
-        .select("id")
-        .eq("id", user.id)
-        .single();
+      if (Object.keys(responderFields).length > 0) {
+        await updateOwnResponderProfile(supabase, userId, responderFields);
 
-      if (existingResponderProfile) {
-        // Update existing responder profile
-        const { error: responderError } = await supabase
+        // The saved map location belongs to the old address; clear it so the dashboard
+        // looks the office up again. Best effort: older databases don't have these columns.
+        await supabase
           .from("responder_profiles")
-          // @ts-ignore - Supabase types may not be fully generated
-          .update(responderFields)
-          .eq("id", user.id);
-
-        if (responderError) {
-          throw new Error(`Failed to update responder profile: ${responderError.message}`);
-        }
-      } else {
-        // Create new responder profile
-        const { error: responderError } = await supabase
-          .from("responder_profiles")
-          // @ts-ignore - Supabase types may not be fully generated
-          .insert({
-            id: user.id,
-            ...responderFields,
-            account_status: "pending",
-          });
-
-        if (responderError) {
-          throw new Error(`Failed to create responder profile: ${responderError.message}`);
-        }
+          // @ts-ignore - generated types lack Relationships, so Update resolves to never
+          .update({ office_latitude: null, office_longitude: null })
+          .eq("id", userId);
       }
     }
 
@@ -97,155 +103,135 @@ export default function SettingsForm({ initialData, userEmail }: SettingsFormPro
   };
 
   const handleContactSave = async (updates: Record<string, string | null>) => {
+    // Only responders have a contact number; the section isn't shown to anyone else
+    if (!isResponder) return;
+
     const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const userId = await requireUserId(supabase);
 
-    if (!user) {
-      throw new Error("User not authenticated. Please log in again.");
-    }
-
-    // Update contact number in responder profile
     if (updates.contact_number !== undefined) {
-      // Check if responder profile exists
-      // @ts-ignore - Supabase types may not be fully generated
-      const { data: existingResponderProfile } = await supabase
-        .from("responder_profiles")
-        .select("id")
-        .eq("id", user.id)
-        .single();
-
-      if (existingResponderProfile) {
-        // Update existing responder profile
-        const { error: responderError } = await supabase
-          .from("responder_profiles")
-          // @ts-ignore - Supabase types may not be fully generated
-          .update({ contact_number: updates.contact_number })
-          .eq("id", user.id);
-
-        if (responderError) {
-          throw new Error(`Failed to update contact number: ${responderError.message}`);
-        }
-      } else {
-        // Create new responder profile with contact number
-        const { error: responderError } = await supabase
-          .from("responder_profiles")
-          // @ts-ignore - Supabase types may not be fully generated
-          .insert({
-            id: user.id,
-            contact_number: updates.contact_number,
-            account_status: "pending",
-          });
-
-        if (responderError) {
-          throw new Error(`Failed to create responder profile: ${responderError.message}`);
-        }
-      }
+      await updateOwnResponderProfile(supabase, userId, { contact_number: updates.contact_number });
     }
 
-    // Refresh the page to get updated data
     router.refresh();
   };
 
   const handlePasswordSave = async (password: string) => {
     const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    await requireUserId(supabase);
 
-    if (!user) {
-      throw new Error("User not authenticated. Please log in again.");
-    }
-
-    const { error: passwordError } = await supabase.auth.updateUser({
-      password: password,
-    });
+    const { error: passwordError } = await supabase.auth.updateUser({ password });
 
     if (passwordError) {
       throw new Error(passwordError.message);
     }
   };
 
-  return (
-    <div className="space-y-4 w-full overflow-hidden">
-      {/* Profile Info Section */}
-      <Card className="bg-white dark:bg-slate-800 shadow-md w-full overflow-hidden">
+  if (!isResponder) {
+    return (
+      <div className="space-y-6">
         <EditableSection
-          title="Profile Info"
-          icon={User}
+          title="Profile"
+          description="Your name appears in the sidebar."
           fields={[
             {
-              label: "Full Office Name",
-              value: initialData?.full_name || null,
+              label: "Name",
+              value: initialData.full_name,
               fieldKey: "full_name",
               type: "text",
-              placeholder: "Enter your full name",
-              validation: (value) => validateTextField(value, "Full name", 100),
+              placeholder: "Your name",
+              autoComplete: "name",
+              validation: (value) => validateTextField(value, "Name", 100),
             },
             {
-              label: "Municipality",
-              value: initialData?.municipality || null,
-              fieldKey: "municipality",
-              type: "text",
-              placeholder: "Enter your municipality",
-              validation: (value) => validateTextField(value, "Municipality", 100),
-            },
-            {
-              label: "Province",
-              value: initialData?.province || null,
-              fieldKey: "province",
-              type: "text",
-              placeholder: "Enter your province",
-              validation: (value) => validateTextField(value, "Province", 100),
-            },
-            {
-              label: "Office Address",
-              value: initialData?.office_address || null,
-              fieldKey: "office_address",
-              type: "text",
-              placeholder: "Enter your office address",
-              validation: (value) => validateTextField(value, "Office address", 255),
+              label: "Email",
+              value: email,
+              fieldKey: "email",
+              type: "email",
+              disabled: true,
+              helperText: EMAIL_HELPER,
             },
           ]}
           onSave={handleProfileSave}
         />
-      </Card>
+        <ChangePasswordSection onSave={handlePasswordSave} />
+      </div>
+    );
+  }
 
-      {/* Contact Info Section */}
-      <Card className="bg-white dark:bg-slate-800 shadow-md w-full overflow-hidden">
-        <EditableSection
-          title="Contact Info"
-          icon={Mail}
-          fields={[
-            {
-              label: "Email",
-              value: userEmail || initialData?.email || null,
-              fieldKey: "email",
-              type: "email",
-              disabled: true,
-              helperText: "Email cannot be changed. Contact support if you need to update it.",
-              icon: Mail,
-            },
-            {
-              label: "Contact Number",
-              value: initialData?.contact_number || null,
-              fieldKey: "contact_number",
-              type: "tel",
-              placeholder: "Enter your contact number (e.g., +63 912 345 6789)",
-              validation: validatePhoneNumber,
-              helperText: "Format: digits and common formatting characters (spaces, dashes, parentheses)",
-              icon: Phone,
-            },
-          ]}
-          onSave={handleContactSave}
-        />
-      </Card>
+  return (
+    <div className="space-y-6">
+      <EditableSection
+        title="Office profile"
+        description="Your office name and where it's located."
+        fields={[
+          {
+            label: "Office name",
+            value: initialData.full_name,
+            fieldKey: "full_name",
+            type: "text",
+            placeholder: "e.g. MDRRMO Santa Rosa",
+            autoComplete: "organization",
+            validation: (value) => validateTextField(value, "Office name", 100),
+          },
+          {
+            label: "Municipality",
+            value: initialData.municipality,
+            fieldKey: "municipality",
+            type: "text",
+            placeholder: "Municipality or city",
+            validation: (value) => validateTextField(value, "Municipality", 100),
+          },
+          {
+            label: "Province",
+            value: initialData.province,
+            fieldKey: "province",
+            type: "text",
+            placeholder: "Province",
+            validation: (value) => validateTextField(value, "Province", 100),
+          },
+          {
+            label: "Office address",
+            value: initialData.office_address,
+            fieldKey: "office_address",
+            type: "text",
+            placeholder: "Street, barangay",
+            autoComplete: "street-address",
+            validation: (value) => validateTextField(value, "Office address", 255),
+          },
+        ]}
+        onSave={handleProfileSave}
+      />
 
-      {/* Change Password Section */}
-      <Card className="bg-white dark:bg-slate-800 shadow-md w-full overflow-hidden">
-        <ChangePasswordSection icon={Lock} onSave={handlePasswordSave} />
-      </Card>
+      <EditableSection
+        title="Contact"
+        description="How AGAP administrators can reach your office."
+        fields={[
+          {
+            label: "Email",
+            value: email,
+            fieldKey: "email",
+            type: "email",
+            disabled: true,
+            helperText: EMAIL_HELPER,
+          },
+          {
+            label: "Contact number",
+            value: initialData.contact_number,
+            fieldKey: "contact_number",
+            type: "tel",
+            placeholder: "e.g. +63 912 345 6789",
+            autoComplete: "tel",
+            validation: validatePhoneNumber,
+            helperText: "Digits, spaces, dashes, and parentheses are fine.",
+          },
+        ]}
+        onSave={handleContactSave}
+      />
+
+      <AlertsSection />
+
+      <ChangePasswordSection onSave={handlePasswordSave} />
     </div>
   );
 }

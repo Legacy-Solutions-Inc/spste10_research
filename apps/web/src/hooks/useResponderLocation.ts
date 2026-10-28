@@ -9,6 +9,10 @@ const DEFAULT_CENTER: [number, number] = [10.7202, 122.5621];
 
 interface ResponderLocation {
   coordinates: [number, number];
+  /** True once the office address was geocoded; otherwise coordinates are the Iloilo fallback. */
+  located: boolean;
+  /** Located from municipality + province only, because the street address wasn't found */
+  approximate: boolean;
   address: string | null;
   loading: boolean;
   error: string | null;
@@ -17,6 +21,8 @@ interface ResponderLocation {
 export function useResponderLocation(): ResponderLocation {
   const [coordinates, setCoordinates] = useState<[number, number]>(DEFAULT_CENTER);
   const [address, setAddress] = useState<string | null>(null);
+  const [located, setLocated] = useState(false);
+  const [approximate, setApproximate] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,16 +46,14 @@ export function useResponderLocation(): ResponderLocation {
           return;
         }
 
-        // Fetch responder profile
-        // @ts-ignore - Supabase types may not be fully generated
+        // select("*") so this keeps working on databases without the saved-location columns
         const { data: responderProfileRaw, error: profileError } = await supabase
           .from("responder_profiles")
-          .select("office_address, municipality, province")
+          .select("*")
           .eq("id", user.id)
           .single();
 
         if (profileError) {
-          console.warn("[useResponderLocation] No responder profile found:", profileError.message);
           // Not an error - responder might not have profile yet
           setLoading(false);
           return;
@@ -60,6 +64,8 @@ export function useResponderLocation(): ResponderLocation {
           office_address: string | null;
           municipality: string | null;
           province: string | null;
+          office_latitude?: number | null;
+          office_longitude?: number | null;
         } | null;
 
         const responderProfile = responderProfileRaw as ResponderProfileData;
@@ -69,12 +75,15 @@ export function useResponderLocation(): ResponderLocation {
           return;
         }
 
+        // Use the location saved by an earlier lookup
+        if (typeof responderProfile.office_latitude === "number" && typeof responderProfile.office_longitude === "number") {
+          setCoordinates([responderProfile.office_latitude, responderProfile.office_longitude]);
+          setLocated(true);
+          setLoading(false);
+          return;
+        }
+
         // Build address string from profile data
-        console.log("[useResponderLocation] Responder profile data:", {
-          office_address: responderProfile.office_address,
-          municipality: responderProfile.municipality,
-          province: responderProfile.province,
-        });
 
         const addressString = buildAddressString(
           responderProfile.office_address,
@@ -82,31 +91,36 @@ export function useResponderLocation(): ResponderLocation {
           responderProfile.province
         );
 
-        console.log("[useResponderLocation] Built address string:", addressString);
-
         if (!addressString) {
-          console.warn("[useResponderLocation] No address data in responder profile");
           setLoading(false);
           return;
         }
 
         setAddress(addressString);
 
-        // Geocode the address
-        console.log(`[useResponderLocation] Starting geocoding for: ${addressString}`);
-        const geocodeResult = await geocodeAddress(addressString);
+        // Geocode the address; free-form street addresses often miss, so fall back to the town
+        let geocodeResult = await geocodeAddress(addressString);
+        if (!geocodeResult && responderProfile.office_address) {
+          const townString = buildAddressString(null, responderProfile.municipality, responderProfile.province);
+          geocodeResult = townString ? await geocodeAddress(townString) : null;
+          if (geocodeResult) setApproximate(true);
+        }
 
         if (geocodeResult) {
           const newCoordinates: [number, number] = [geocodeResult.latitude, geocodeResult.longitude];
           setCoordinates(newCoordinates);
-          console.log(
-            `[useResponderLocation] Successfully geocoded address "${addressString}" to:`,
-            newCoordinates
-          );
+          setLocated(true);
+
+          // Save it so the address isn't looked up again on every load (Nominatim's usage
+          // policy). Only possible once the office_latitude/longitude columns exist.
+          if ("office_latitude" in responderProfile) {
+            await supabase
+              .from("responder_profiles")
+              // @ts-ignore - Supabase types may not be fully generated
+              .update({ office_latitude: newCoordinates[0], office_longitude: newCoordinates[1] })
+              .eq("id", user.id);
+          }
         } else {
-          console.warn(
-            `[useResponderLocation] Failed to geocode address: ${addressString}, using default coordinates`
-          );
           setError("Failed to geocode address");
           // Keep default coordinates
         }
@@ -122,5 +136,5 @@ export function useResponderLocation(): ResponderLocation {
     fetchResponderLocation();
   }, []);
 
-  return { coordinates, address, loading, error };
+  return { coordinates, located, approximate, address, loading, error };
 }

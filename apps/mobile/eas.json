@@ -13,7 +13,16 @@
       "developmentClient": true,
       "distribution": "internal"
     },
-    "production": {}
+    "production": {
+      "environment": "production"
+    },
+    "production-apk": {
+      "extends": "production",
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      }
+    }
   },
   "submit": {
     "production": {}

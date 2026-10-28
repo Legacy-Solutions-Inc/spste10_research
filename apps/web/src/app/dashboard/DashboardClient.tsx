@@ -1,242 +1,416 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import dynamic from "next/dynamic";
-import Sidebar from "@/components/Sidebar";
-import AlertsList from "@/components/AlertsList";
-import type { Alert } from "@/types/alert";
-import { useFetchIncidents } from "@/hooks/useFetchIncidents";
-import { useCreateAssignment } from "@/hooks/useCreateAssignment";
-import { useUpdateAssignment } from "@/hooks/useUpdateAssignment";
+import { Bell, BellOff, BellRing, Volume2, VolumeX } from "lucide-react";
+import { AppShell } from "@/components/AppShell";
+import { IncidentDetail } from "@/components/incident/IncidentDetail";
+import { IncidentQueue, type QueueTab } from "./IncidentQueue";
+import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { ToastAction } from "@/components/ui/toast";
+import { toast } from "@/components/ui/use-toast";
+import { useIncidentQueue } from "@/hooks/useIncidentQueue";
+import { useIncidentAlerting } from "@/hooks/useIncidentAlerting";
 import { useResponderLocation } from "@/hooks/useResponderLocation";
-import { incidentToAlert } from "@/types/alert";
+import { useNow } from "@/hooks/useNow";
+import { IncidentUnavailableError, fetchIncidentClaims, resolveIncident, respondToIncident, undoDecline } from "@/lib/incidentActions";
+import { INCIDENT_TYPE_LABEL } from "@/components/incident/IncidentBits";
 import type { Incident } from "@/types/incident";
-import { useToast } from "@/components/ui/use-toast";
-import { requestNotificationPermission, showIncidentNotification, playNotificationSound } from "@/lib/notifications";
 
-// Dynamically import MapComponent to avoid SSR issues
-const MapComponent = dynamic(() => import("@/components/MapComponent"), {
+const IncidentMap = dynamic(() => import("@/components/incident/IncidentMap"), {
   ssr: false,
-  loading: () => (
-    <div className="h-full w-full flex items-center justify-center bg-gray-100">
-      <p className="text-gray-500">Loading map...</p>
-    </div>
-  ),
+  loading: () => <div className="h-full w-full animate-pulse bg-muted" aria-label="Loading map" />,
 });
 
-// Iloilo coordinates: 10.7202° N, 122.5621° E (fallback)
+// Iloilo City, used until the office address is located
 const ILOILO_CENTER: [number, number] = [10.7202, 122.5621];
+const DETAIL_PANEL_WIDTH = 400;
 
-export default function DashboardClient() {
-  const { toast } = useToast();
-  const [notificationPermission, setNotificationPermission] = useState<"default" | "granted" | "denied">("default");
-  const { createAssignment, loading: creatingAssignment } = useCreateAssignment();
-  const { updateAssignment, loading: updatingAssignment } = useUpdateAssignment();
-  const { coordinates: responderCoordinates, loading: loadingLocation, address: responderAddress, error: locationError } = useResponderLocation();
-  
-  const [alerts, setAlerts] = useState<Alert[]>([]);
-  const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
+type Busy = { id: string; action: "accept" | "decline" | "resolve" } | null;
 
-  // Handle new incidents with notifications
-  const handleNewIncident = useCallback((newIncidents: Incident[]) => {
-    newIncidents.forEach((incident) => {
-      const incidentType = incident.type === "alert" ? "Emergency Alert" : "Emergency Report";
-      const location = incident.location_name || "Unknown location";
+const placeName = (incident: Incident) => incident.location_name || "This incident";
 
-      // Show toast notification
-      toast({
-        title: `New ${incidentType}`,
-        description: `Location: ${location}`,
-        variant: "default",
-      });
-
-      // Show browser notification (if permission granted)
-      if (notificationPermission === "granted") {
-        showIncidentNotification(incident);
-      }
-
-      // Play sound notification
-      playNotificationSound();
-    });
-  }, [toast, notificationPermission]);
-
-  const { incidents, loading, error, refetch } = useFetchIncidents(handleNewIncident);
-
-  // Request notification permission on mount
-  useEffect(() => {
-    const requestPermission = async () => {
-      if ("Notification" in window) {
-        if (Notification.permission === "default") {
-          const permission = await requestNotificationPermission();
-          setNotificationPermission(permission);
-        } else {
-          setNotificationPermission(Notification.permission);
-        }
-      }
-    };
-    requestPermission();
-  }, []);
-
-  // Debug logging for responder location
-  useEffect(() => {
-    console.log("[DashboardClient] Responder location state:", {
-      coordinates: responderCoordinates,
-      loading: loadingLocation,
-      address: responderAddress,
-      error: locationError,
-    });
-  }, [responderCoordinates, loadingLocation, responderAddress, locationError]);
-
-  // Convert incidents to alerts format for components
-  useEffect(() => {
-    const convertedAlerts = incidents.map(incidentToAlert);
-    setAlerts(convertedAlerts);
-  }, [incidents]);
-
-  const handleApprove = async (alertId: string) => {
-    setActionError(null);
-    
-    try {
-      // Find the incident
-      const incident = incidents.find((inc) => inc.id === alertId);
-      if (!incident) {
-        throw new Error("Incident not found");
-      }
-
-      // If already assigned, update the assignment
-      if (incident.assignment) {
-        await updateAssignment({
-          assignmentId: incident.assignment.id,
-          responseStatus: 'accepted',
-        });
-      } else {
-        // Create new assignment with accepted status
-        await createAssignment({
-          incidentId: alertId,
-          incidentType: incident.type,
-          responseStatus: 'accepted',
-        });
-      }
-
-      // Refetch incidents to get updated data
-      refetch();
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Failed to accept incident";
-      setActionError(errorMessage);
-      console.error("Error accepting incident:", err);
-    }
-  };
-
-  const handleDismiss = async (alertId: string) => {
-    setActionError(null);
-    
-    try {
-      // Find the incident
-      const incident = incidents.find((inc) => inc.id === alertId);
-      if (!incident) {
-        throw new Error("Incident not found");
-      }
-
-      // If already assigned, update the assignment
-      if (incident.assignment) {
-        await updateAssignment({
-          assignmentId: incident.assignment.id,
-          responseStatus: 'rejected',
-        });
-      } else {
-        // Create new assignment with rejected status
-        await createAssignment({
-          incidentId: alertId,
-          incidentType: incident.type,
-          responseStatus: 'rejected',
-        });
-      }
-
-      // Refetch incidents to get updated data
-      refetch();
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Failed to reject incident";
-      setActionError(errorMessage);
-      console.error("Error rejecting incident:", err);
-    }
-  };
-
-  // Show loading state
-  if (loading) {
+function AlertControls({
+  needsSetup,
+  soundOn,
+  permission,
+  onEnable,
+  onToggleSound,
+}: {
+  needsSetup: boolean;
+  soundOn: boolean;
+  permission: ReturnType<typeof useIncidentAlerting>["permission"];
+  onEnable: () => void;
+  onToggleSound: () => void;
+}) {
+  if (needsSetup) {
     return (
-      <div className="flex min-h-screen overflow-hidden bg-slate-100 dark:bg-slate-900">
-        <Sidebar />
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-slate-600 dark:text-slate-400">Loading incidents...</p>
-          </div>
-        </div>
-      </div>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button onClick={onEnable} className="shadow-panel">
+            <BellRing />
+            Enable alerts
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" align="end" className="max-w-[260px]">
+          Plays a sound and shows a desktop notification when a new incident arrives.
+        </TooltipContent>
+      </Tooltip>
     );
   }
 
-  // Show error state
-  if (error) {
-    return (
-      <div className="flex min-h-screen overflow-hidden bg-slate-100 dark:bg-slate-900">
-        <Sidebar />
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center bg-white dark:bg-slate-800 p-8 rounded-xl shadow-lg">
-            <p className="text-red-600 dark:text-red-400 mb-4 font-medium">Error: {error}</p>
-            <button
-              onClick={() => refetch()}
-              className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-md transition-colors duration-200 font-medium"
-            >
-              Retry
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const notificationsBlocked = permission === "denied" || permission === "unsupported";
 
   return (
-    <div className="flex min-h-screen overflow-hidden bg-slate-100 dark:bg-slate-900">
-      {/* Sidebar */}
-      <Sidebar />
-
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden gap-0">
-        {/* Incident Panel */}
-        <div className="w-full lg:w-96 border-r border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden flex flex-col">
-          {actionError && (
-            <div className="bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-800 p-3">
-              <p className="text-sm text-red-700 dark:text-red-400">{actionError}</p>
-            </div>
-          )}
-          <AlertsList
-            alerts={alerts}
-            selectedAlert={selectedAlert}
-            onSelectAlert={setSelectedAlert}
-          />
-        </div>
-
-        {/* Map Panel */}
-        <div className="flex-1 relative bg-white dark:bg-slate-800">
-          <MapComponent
-            alerts={alerts}
-            selectedAlert={selectedAlert}
-            center={loadingLocation ? ILOILO_CENTER : responderCoordinates}
-            responderLocation={loadingLocation ? null : responderCoordinates}
-            onApprove={handleApprove}
-            onDismiss={handleDismiss}
-          />
-          {(creatingAssignment || updatingAssignment) && (
-            <div className="absolute top-4 right-4 bg-blue-600 dark:bg-blue-700 text-white px-4 py-2 rounded-xl shadow-lg z-[1000] flex items-center gap-2">
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-              <span className="text-sm font-medium">Processing...</span>
-            </div>
-          )}
-        </div>
-      </div>
+    <div className="flex items-center gap-1 rounded-lg border bg-card p-1 shadow-panel">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="flex h-8 cursor-default items-center gap-1.5 px-2 text-13 font-medium text-foreground" tabIndex={0}>
+            {notificationsBlocked ? <BellOff className="h-4 w-4 text-muted-foreground" /> : <Bell className="h-4 w-4 text-primary" />}
+            {notificationsBlocked ? "Sound only" : "Alerts on"}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" align="end" className="max-w-[260px]">
+          {permission === "denied"
+            ? "Desktop notifications are blocked for this site. Allow them in your browser's site settings to get alerts while AGAP is in the background."
+            : permission === "unsupported"
+              ? "This browser doesn't support desktop notifications."
+              : "You'll get a sound and a desktop notification for each new incident."}
+        </TooltipContent>
+      </Tooltip>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onToggleSound} aria-label={soundOn ? "Mute alert sound" : "Turn alert sound on"} aria-pressed={!soundOn}>
+            {soundOn ? <Volume2 /> : <VolumeX className="text-alert" />}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" align="end">
+          {soundOn ? "Mute alert sound" : "Turn alert sound on"}
+        </TooltipContent>
+      </Tooltip>
     </div>
   );
 }
 
+/**
+ * When incidents leave a list without this office acting on them, say what happened:
+ * which office accepted it, or that the citizen canceled or closed it.
+ */
+function useDepartureNotices(
+  items: Incident[],
+  listTab: QueueTab,
+  ownActionIds: MutableRefObject<Set<string>>,
+  closeIfOpen: (ids: string[], listTab: QueueTab) => string | null
+) {
+  const previous = useRef<Map<string, Incident>>(new Map());
+
+  useEffect(() => {
+    const current = new Map(items.map((incident) => [incident.id, incident]));
+    const departed = Array.from(previous.current.values()).filter(
+      (incident) => !current.has(incident.id) && !ownActionIds.current.has(incident.id)
+    );
+    previous.current = current;
+    if (!departed.length) return;
+
+    const openId = closeIfOpen(departed.map((incident) => incident.id), listTab);
+
+    fetchIncidentClaims(departed.map((incident) => incident.id)).then((claims) => {
+      departed.forEach((incident) => {
+        const claim = claims.get(incident.id);
+        const place = placeName(incident);
+        if (listTab === "incoming" && claim?.acceptedBy) {
+          toast({ title: `Accepted by ${claim.acceptedBy}`, description: `${place} left your queue.` });
+        } else if (claim?.status === "canceled") {
+          toast({ title: "Canceled by the citizen", description: `${place} left your ${listTab === "incoming" ? "queue" : "active incidents"}.` });
+        } else if (listTab === "active" && claim?.status === "completed") {
+          toast({ title: "Closed by the citizen", description: `The citizen marked ${place} as resolved.` });
+        } else if (claim?.status === "pending") {
+          // Declined from another tab: other offices can still take it, nothing to report
+        } else if (incident.id === openId) {
+          toast({
+            title: "Incident no longer available",
+            description: listTab === "incoming" ? "Another office accepted it or the citizen canceled it." : "The citizen closed it from their app.",
+          });
+        }
+      });
+    });
+  }, [items, listTab, ownActionIds, closeIfOpen]);
+}
+
+export default function DashboardClient() {
+  const now = useNow(1000);
+  const office = useResponderLocation();
+  const [tab, setTab] = useState<QueueTab>("incoming");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [busy, setBusy] = useState<Busy>(null);
+  const [confirmResolve, setConfirmResolve] = useState<Incident | null>(null);
+  // Bumped after Accept/Decline/Resolve so the map zooms back out to the remaining pins
+  const [fitNonce, setFitNonce] = useState(0);
+
+  const announceRef = useRef<(arrivals: Incident[]) => void>(() => {});
+  const handleArrivals = useCallback((arrivals: Incident[]) => {
+    announceRef.current(arrivals);
+    arrivals.forEach((incident) => {
+      toast({
+        title: `New ${INCIDENT_TYPE_LABEL[incident.type]}`,
+        description: incident.location_name || "Location not named",
+        variant: incident.type === "alert" ? "error" : "default",
+      });
+    });
+  }, []);
+
+  const queue = useIncidentQueue(handleArrivals);
+  const { incoming, active, refetch, removeFromIncoming, removeFromActive } = queue;
+
+  const alerting = useIncidentAlerting({ incomingIds: incoming.map((i) => i.id), title: "Dashboard" });
+  announceRef.current = alerting.announce;
+
+  const list = tab === "incoming" ? incoming : active;
+  const selected = useMemo(() => list.find((incident) => incident.id === selectedId) ?? null, [list, selectedId]);
+
+  const { markSeen } = alerting;
+  const select = useCallback(
+    (id: string) => {
+      setSelectedId(id);
+      markSeen(id);
+    },
+    [markSeen]
+  );
+
+  const changeTab = (next: QueueTab) => {
+    setTab(next);
+    setSelectedId(null);
+  };
+
+  // Incidents this screen moved itself (accept/decline/resolve), so they aren't reported as taken elsewhere
+  const ownActionIds = useRef<Set<string>>(new Set());
+  const selectedIdRef = useRef(selectedId);
+  selectedIdRef.current = selectedId;
+  const tabRef = useRef(tab);
+  tabRef.current = tab;
+
+  const closeIfOpen = useCallback((ids: string[], listTab: QueueTab) => {
+    if (tabRef.current === listTab && selectedIdRef.current && ids.includes(selectedIdRef.current)) {
+      setSelectedId(null);
+      return selectedIdRef.current;
+    }
+    return null;
+  }, []);
+  useDepartureNotices(incoming, "incoming", ownActionIds, closeIfOpen);
+  useDepartureNotices(active, "active", ownActionIds, closeIfOpen);
+
+  // Escape closes the detail panel (dialogs handle their own Escape)
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !document.querySelector('[role="alertdialog"]')) {
+        setSelectedId(null);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  const handleUnavailable = async (incident: Incident, error: unknown, fallbackTitle: string) => {
+    if (error instanceof IncidentUnavailableError) {
+      ownActionIds.current.add(incident.id);
+      setSelectedId(null);
+      const claim = (await fetchIncidentClaims([incident.id])).get(incident.id);
+      toast({
+        title: "Already handled",
+        description: claim?.acceptedBy ? `${claim.acceptedBy} already accepted this incident.` : error.message,
+        variant: "error",
+      });
+    } else {
+      toast({
+        title: fallbackTitle,
+        description: error instanceof Error ? error.message : "Check your connection and try again.",
+        variant: "error",
+      });
+    }
+    refetch();
+  };
+
+  const accept = async (incident: Incident) => {
+    setBusy({ id: incident.id, action: "accept" });
+    try {
+      await respondToIncident(incident, "accepted");
+      ownActionIds.current.add(incident.id);
+      removeFromIncoming(incident.id);
+      setSelectedId(null);
+      setFitNonce((n) => n + 1);
+      toast({
+        title: "Accepted",
+        description: `${placeName(incident)} is now in Active.`,
+        variant: "success",
+        action: (
+          <ToastAction
+            altText="Open the accepted incident"
+            onClick={() => {
+              setTab("active");
+              setSelectedId(incident.id);
+            }}
+          >
+            Open
+          </ToastAction>
+        ),
+      });
+      refetch();
+    } catch (error) {
+      handleUnavailable(incident, error, "Couldn't accept this incident");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const decline = async (incident: Incident) => {
+    setBusy({ id: incident.id, action: "decline" });
+    try {
+      const assignmentId = await respondToIncident(incident, "rejected");
+      ownActionIds.current.add(incident.id);
+      removeFromIncoming(incident.id);
+      setSelectedId(null);
+      setFitNonce((n) => n + 1);
+      toast({
+        duration: 10000,
+        title: "Declined",
+        description: `${placeName(incident)} is hidden from your queue. Other offices can still accept it.`,
+        action: (
+          <ToastAction
+            altText="Undo decline"
+            onClick={async () => {
+              try {
+                await undoDecline(assignmentId);
+                ownActionIds.current.delete(incident.id);
+                toast({ title: "Back in Incoming", description: placeName(incident) });
+              } catch (error) {
+                toast({
+                  title: "Couldn't undo the decline",
+                  description: error instanceof Error ? error.message : "Try again.",
+                  variant: "error",
+                });
+              }
+              refetch();
+            }}
+          >
+            Undo
+          </ToastAction>
+        ),
+      });
+      refetch();
+    } catch (error) {
+      handleUnavailable(incident, error, "Couldn't decline this incident");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const resolve = async (incident: Incident) => {
+    setConfirmResolve(null);
+    setBusy({ id: incident.id, action: "resolve" });
+    try {
+      await resolveIncident(incident);
+      ownActionIds.current.add(incident.id);
+      removeFromActive(incident.id);
+      setSelectedId(null);
+      setFitNonce((n) => n + 1);
+      toast({ title: "Marked resolved", description: `${placeName(incident)} moved to History.`, variant: "success" });
+      refetch();
+    } catch (error) {
+      handleUnavailable(incident, error, "Couldn't mark this incident resolved");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <AppShell className="flex overflow-hidden">
+      <IncidentQueue
+        tab={tab}
+        onTabChange={changeTab}
+        incoming={incoming}
+        active={active}
+        selectedId={selectedId}
+        onSelect={select}
+        unseenIds={alerting.unseenIds}
+        now={now}
+        loading={queue.loading}
+        error={queue.error}
+        onRetry={refetch}
+        live={queue.live}
+      />
+
+      <div className="relative min-w-0 flex-1">
+        <div className="absolute inset-0 isolate">
+          <IncidentMap
+            incidents={list}
+            selectedId={selectedId}
+            onSelect={select}
+            variant={tab}
+            office={office.loading ? null : { coordinates: office.coordinates, located: office.located, approximate: office.approximate }}
+            fallbackCenter={ILOILO_CENTER}
+            leftInset={selected ? DETAIL_PANEL_WIDTH + 16 : 0}
+            fitKey={`${tab}-${fitNonce}`}
+          />
+        </div>
+
+        <div className="absolute right-4 top-4 z-10">
+          <AlertControls
+            needsSetup={alerting.needsSetup}
+            soundOn={alerting.soundOn}
+            permission={alerting.permission}
+            onEnable={alerting.enable}
+            onToggleSound={alerting.toggleSound}
+          />
+        </div>
+
+        {selected && (
+          <div
+            className="absolute bottom-4 left-4 top-4 z-10 overflow-hidden rounded-xl border bg-card shadow-panel animate-in fade-in-0 slide-in-from-left-2 duration-150"
+            style={{ width: DETAIL_PANEL_WIDTH }}
+          >
+            <IncidentDetail
+              key={selected.id}
+              incident={selected}
+              mode={tab}
+              now={now}
+              onClose={() => setSelectedId(null)}
+              onAccept={() => accept(selected)}
+              onDecline={() => decline(selected)}
+              onResolve={() => setConfirmResolve(selected)}
+              busy={busy?.id === selected.id ? busy.action : null}
+            />
+          </div>
+        )}
+      </div>
+
+      <AlertDialog open={!!confirmResolve} onOpenChange={(open) => !open && setConfirmResolve(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Mark this incident resolved?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmResolve ? `${placeName(confirmResolve)} moves to History, ` : "It moves to History, "}
+              and the citizen&apos;s app shows it as completed. This can&apos;t be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep active</AlertDialogCancel>
+            <AlertDialogAction className="bg-resolved hover:bg-resolved/90" onClick={() => confirmResolve && resolve(confirmResolve)}>
+              Mark resolved
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </AppShell>
+  );
+}

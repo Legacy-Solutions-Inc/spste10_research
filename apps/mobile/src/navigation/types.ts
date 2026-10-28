@@ -6,43 +6,29 @@ export type RootStackParamList = {
   Login3: undefined;
   Login4: undefined;
   Login5: { email?: string } | undefined;
+  OnboardingInfo: undefined;
+  OnboardingLocation: undefined;
   Home: undefined;
-  Alert: undefined;
-  Alert2: { alertId: string };
-  Alert3: { alertId?: string };
-  AlertRejected: undefined;
+  // Without an id the screen sends a new alert; with one it follows it live
+  AlertLive: { id?: string } | undefined;
   Report1: undefined;
-  Report2: {
-    imageUri: string;
-    latitude: number;
-    longitude: number;
-    timestamp: string; // ISO string to avoid non-serializable warning
-    locationName?: string;
-  };
-  Report3: {
-    imageUri: string;
-    latitude: number;
-    longitude: number;
-    timestamp: string; // ISO string to avoid non-serializable warning
-    locationName?: string;
-    aiDescription?: string; // AI-generated description of the emergency photo
-  };
-  Report4: { reportId: string };
-  Report5: { reportId?: string };
-  ReportRejected: undefined;
-  Settings1: undefined;
+  // Location is resolved on the review screen, not at capture
+  Report2: { imageUri: string; timestamp: string };
+  Report3: { imageUri: string; timestamp: string };
+  ReportLive: { id: string };
+  Account: undefined;
   Profile: undefined;
   History: undefined;
   HistoryDetails: {
+    id: string;
+    incidentType: "alert" | "report";
     imageUri: string;
     date: string; // ISO string to avoid serialization issues
     latitude: number;
     longitude: number;
     locationName: string;
     description?: string;
-    status?: string;
-    incidentType?: "alert" | "report";
-    alertId?: string;
+    status: string;
   };
 };
 

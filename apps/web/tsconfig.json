@@ -3,10 +3,12 @@
   "compilerOptions": {
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "plugins": [{ "name": "next" }],
+    "typeRoots": ["./node_modules/@types"],
     "paths": {
       "@/*": ["./src/*"],
       "@repo/types": ["../../packages/types/src"],
-      "@repo/core": ["../../packages/core/src"]
+      "@repo/core": ["../../packages/core/src"],
+      "react": ["./node_modules/@types/react"]
     }
   },
   "include": [

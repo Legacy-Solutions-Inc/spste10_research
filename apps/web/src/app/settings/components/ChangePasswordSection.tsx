@@ -1,69 +1,58 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
+import { KeyRound, Loader2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
-  DialogDescription,
 } from "@/components/ui/dialog";
-import { CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Pencil, Lock, Save, X, Loader2 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
-import type { LucideIcon } from "lucide-react";
+
+const MIN_PASSWORD_LENGTH = 6;
 
 interface ChangePasswordSectionProps {
-  icon?: LucideIcon;
   onSave: (password: string) => Promise<void>;
 }
 
-export default function ChangePasswordSection({ icon: Icon, onSave }: ChangePasswordSectionProps) {
+type PasswordErrors = { password?: string; confirmPassword?: string };
+
+export default function ChangePasswordSection({ onSave }: ChangePasswordSectionProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [oldPassword, setOldPassword] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [errors, setErrors] = useState<{ oldPassword?: string; password?: string; confirmPassword?: string }>({});
+  const [errors, setErrors] = useState<PasswordErrors>({});
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
 
   const validatePassword = (pwd: string): string | null => {
-    if (!pwd || pwd.trim() === "") return "Password is required";
-    if (pwd.length < 6) return "Password must be at least 6 characters";
+    if (!pwd || pwd.trim() === "") return "Enter a new password.";
+    if (pwd.length < MIN_PASSWORD_LENGTH) return `Use at least ${MIN_PASSWORD_LENGTH} characters.`;
     return null;
   };
 
-  const handleOpenDialog = () => {
-    setOldPassword("");
+  const resetFields = () => {
     setPassword("");
     setConfirmPassword("");
     setErrors({});
+  };
+
+  const handleOpenDialog = () => {
+    resetFields();
     setIsDialogOpen(true);
   };
 
   const handleCloseDialog = () => {
     if (!saving) {
-      setOldPassword("");
-      setPassword("");
-      setConfirmPassword("");
-      setErrors({});
+      resetFields();
       setIsDialogOpen(false);
-    }
-  };
-
-  const handleOldPasswordChange = (value: string) => {
-    setOldPassword(value);
-    if (errors.oldPassword) {
-      setErrors((prev) => {
-        const next = { ...prev };
-        delete next.oldPassword;
-        return next;
-      });
     }
   };
 
@@ -78,7 +67,7 @@ export default function ChangePasswordSection({ icon: Icon, onSave }: ChangePass
     }
     // Re-validate confirm password if both are filled
     if (confirmPassword && value !== confirmPassword) {
-      setErrors((prev) => ({ ...prev, confirmPassword: "Passwords do not match" }));
+      setErrors((prev) => ({ ...prev, confirmPassword: "Passwords don't match." }));
     } else if (errors.confirmPassword && value === confirmPassword) {
       setErrors((prev) => {
         const next = { ...prev };
@@ -98,40 +87,37 @@ export default function ChangePasswordSection({ icon: Icon, onSave }: ChangePass
       });
     }
     if (password && value !== password) {
-      setErrors((prev) => ({ ...prev, confirmPassword: "Passwords do not match" }));
+      setErrors((prev) => ({ ...prev, confirmPassword: "Passwords don't match." }));
     }
   };
 
-  const validate = (): boolean => {
-    const newErrors: { oldPassword?: string; password?: string; confirmPassword?: string } = {};
-    let isValid = true;
+  const validate = (): PasswordErrors => {
+    const newErrors: PasswordErrors = {};
 
     const passwordError = validatePassword(password);
     if (passwordError) {
       newErrors.password = passwordError;
-      isValid = false;
     }
 
     if (password && confirmPassword && password !== confirmPassword) {
-      newErrors.confirmPassword = "Passwords do not match";
-      isValid = false;
+      newErrors.confirmPassword = "Passwords don't match.";
     }
 
     if (password && !confirmPassword) {
-      newErrors.confirmPassword = "Please confirm your password";
-      isValid = false;
+      newErrors.confirmPassword = "Confirm your new password.";
     }
 
     setErrors(newErrors);
-    return isValid;
+    return newErrors;
   };
 
-  const handleSave = async () => {
-    if (!validate()) {
-      toast({
-        description: "Please fix the errors before saving.",
-        variant: "error",
-      });
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (saving) return;
+
+    const newErrors = validate();
+    if (newErrors.password || newErrors.confirmPassword) {
+      document.getElementById(newErrors.password ? "new-password" : "confirm-password")?.focus();
       return;
     }
 
@@ -139,20 +125,13 @@ export default function ChangePasswordSection({ icon: Icon, onSave }: ChangePass
 
     try {
       await onSave(password);
-      toast({
-        description: "Password changed successfully!",
-        variant: "success",
-      });
-      setTimeout(() => {
-        setIsDialogOpen(false);
-        setOldPassword("");
-        setPassword("");
-        setConfirmPassword("");
-      }, 500);
+      toast({ title: "Password changed", variant: "success" });
+      resetFields();
+      setIsDialogOpen(false);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Failed to change password";
       toast({
-        description: errorMessage,
+        title: "Couldn't change password",
+        description: error instanceof Error ? error.message : "Check your connection and try again.",
         variant: "error",
       });
     } finally {
@@ -162,148 +141,79 @@ export default function ChangePasswordSection({ icon: Icon, onSave }: ChangePass
 
   return (
     <>
-      <CardHeader className="pb-3 px-4 md:px-6 pt-4 md:pt-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 md:gap-3">
-            {Icon && (
-              <Icon className="w-4 h-4 md:w-5 md:h-5 text-slate-600 dark:text-slate-400" />
-            )}
-            <CardTitle className="text-base md:text-lg font-semibold text-slate-900 dark:text-slate-100">
-              Change Password
-            </CardTitle>
+      <Card>
+        <CardHeader className="flex-row items-start justify-between gap-4 space-y-0">
+          <div className="min-w-0 space-y-1">
+            <CardTitle>Password</CardTitle>
+            <CardDescription>Change the password you use to sign in to AGAP.</CardDescription>
           </div>
-          <Button
-            onClick={handleOpenDialog}
-            disabled={saving}
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 md:h-9 md:w-9"
-          >
-            <Pencil className="h-3.5 w-3.5 md:h-4 md:w-4" />
+          <Button type="button" variant="outline" size="sm" onClick={handleOpenDialog}>
+            <KeyRound aria-hidden />
+            Change password
           </Button>
-        </div>
-      </CardHeader>
+        </CardHeader>
+      </Card>
 
-      <CardContent className="px-4 md:px-6 pb-4 md:pb-6">
-        <p className="text-xs md:text-sm text-muted-foreground">
-          Click Edit to change your password
-        </p>
-      </CardContent>
-
-      <Dialog open={isDialogOpen} onOpenChange={handleCloseDialog}>
+      <Dialog open={isDialogOpen} onOpenChange={(open) => (open ? setIsDialogOpen(true) : handleCloseDialog())}>
         <DialogContent className="max-w-md">
-          <DialogHeader>
-            <div className="flex items-center gap-3">
-              <Lock className="w-5 h-5 text-slate-600 dark:text-slate-400" />
-              <DialogTitle>Change Password</DialogTitle>
-            </div>
-            <DialogDescription>
-              Enter your new password below. Make sure it&apos;s at least 6 characters long.
-            </DialogDescription>
-          </DialogHeader>
+          <form onSubmit={handleSubmit} noValidate className="grid gap-5">
+            <DialogHeader>
+              <DialogTitle>Change password</DialogTitle>
+              <DialogDescription>
+                Use at least {MIN_PASSWORD_LENGTH} characters. You&apos;ll use the new password the next time you sign in.
+              </DialogDescription>
+            </DialogHeader>
 
-          <ScrollArea className="max-h-[60vh] pr-4">
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="oldPassword" className="flex items-center gap-2">
-                  <Lock className="w-4 h-4 text-slate-500 dark:text-slate-400" />
-                  Old Password (Optional)
-                </Label>
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="new-password">New password</Label>
                 <Input
-                  id="oldPassword"
+                  id="new-password"
                   type="password"
-                  value={oldPassword}
-                  onChange={(e) => handleOldPasswordChange(e.target.value)}
-                  placeholder="Enter your current password"
-                  disabled={saving}
-                  className={
-                    errors.oldPassword
-                      ? "border-red-300 focus:ring-red-500 bg-red-50 dark:bg-red-900/20"
-                      : ""
-                  }
-                />
-                {errors.oldPassword && (
-                  <p className="text-xs text-red-600 dark:text-red-400 mt-1">
-                    {errors.oldPassword}
-                  </p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="newPassword" className="flex items-center gap-2">
-                  <Lock className="w-4 h-4 text-slate-500 dark:text-slate-400" />
-                  New Password
-                </Label>
-                <Input
-                  id="newPassword"
-                  type="password"
+                  autoComplete="new-password"
                   value={password}
                   onChange={(e) => handlePasswordChange(e.target.value)}
-                  placeholder="Enter new password (minimum 6 characters)"
                   disabled={saving}
-                  className={
-                    errors.password
-                      ? "border-red-300 focus:ring-red-500 bg-red-50 dark:bg-red-900/20"
-                      : ""
-                  }
+                  aria-invalid={errors.password ? true : undefined}
+                  aria-describedby={errors.password ? "new-password-error" : undefined}
                 />
                 {errors.password && (
-                  <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                  <p id="new-password-error" className="text-13 text-alert">
                     {errors.password}
                   </p>
                 )}
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="confirmPassword" className="flex items-center gap-2">
-                  <Lock className="w-4 h-4 text-slate-500 dark:text-slate-400" />
-                  Confirm New Password
-                </Label>
+              <div className="space-y-1.5">
+                <Label htmlFor="confirm-password">Confirm new password</Label>
                 <Input
-                  id="confirmPassword"
+                  id="confirm-password"
                   type="password"
+                  autoComplete="new-password"
                   value={confirmPassword}
                   onChange={(e) => handleConfirmPasswordChange(e.target.value)}
-                  placeholder="Confirm new password"
                   disabled={saving}
-                  className={
-                    errors.confirmPassword
-                      ? "border-red-300 focus:ring-red-500 bg-red-50 dark:bg-red-900/20"
-                      : ""
-                  }
+                  aria-invalid={errors.confirmPassword ? true : undefined}
+                  aria-describedby={errors.confirmPassword ? "confirm-password-error" : undefined}
                 />
                 {errors.confirmPassword && (
-                  <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                  <p id="confirm-password-error" className="text-13 text-alert">
                     {errors.confirmPassword}
                   </p>
                 )}
               </div>
             </div>
-          </ScrollArea>
 
-          <DialogFooter>
-            <Button
-              onClick={handleCloseDialog}
-              disabled={saving}
-              variant="secondary"
-            >
-              <X className="h-4 w-4 mr-2" />
-              Cancel
-            </Button>
-            <Button onClick={handleSave} disabled={saving} className="min-w-[100px]">
-              {saving ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <Save className="h-4 w-4 mr-2" />
-                  Save
-                </>
-              )}
-            </Button>
-          </DialogFooter>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={handleCloseDialog} disabled={saving}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={saving}>
+                {saving && <Loader2 className="animate-spin" aria-hidden />}
+                {saving ? "Changing…" : "Change password"}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </>

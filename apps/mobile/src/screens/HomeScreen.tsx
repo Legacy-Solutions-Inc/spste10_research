@@ -1,195 +1,196 @@
-import { View, Text, ScrollView, Image, TouchableOpacity } from "react-native";
-import React, { useEffect, useState } from "react";
-import { useNavigation } from "@react-navigation/native";
+import { useCallback, useState } from "react";
+import { View, Text, ScrollView, Image, Pressable } from "react-native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { supabase, isSupabaseConfigured } from "@/lib/supabase";
-import type { Session } from "@supabase/supabase-js";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { StatusBar } from "expo-status-bar";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import type { RootStackParamList } from "@/navigation/types";
 import { useGetProfile } from "@/screens/settingsOptions/hooks/useGetProfile";
+import { SosHoldButton } from "@/components/SosHoldButton";
+import { useActiveIncident } from "@/hooks/useActiveIncident";
+import { loadEmergencyInfo } from "@/lib/profile";
+import { STATUS_LABELS } from "@/lib/incidents";
+import colors from "@/theme/colors";
 
 type HomeNavigation = NativeStackNavigationProp<RootStackParamList, "Home">;
 
 export function HomeScreen() {
   const navigation = useNavigation<HomeNavigation>();
-  const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
-  const supabaseAvailable = isSupabaseConfigured();
-  const { profileData, loading: loadingProfile } = useGetProfile();
+  const insets = useSafeAreaInsets();
+  const { profileData, refetch: refetchProfile } = useGetProfile();
+  const activeIncident = useActiveIncident();
+  const [infoMissing, setInfoMissing] = useState(false);
+  // Scrolling while the SOS is held would steal the touch and reset the hold
+  const [holdingSos, setHoldingSos] = useState(false);
 
-  // Helper function to get display name with priority order
-  const getDisplayName = (): string => {
-    if (!profileData) return "User";
+  // Name, photo and the emergency-info nudge stay current after editing them
+  useFocusEffect(
+    useCallback(() => {
+      refetchProfile();
+      loadEmergencyInfo()
+        .then((info) => setInfoMissing(!info.firstName || !info.contactNumber))
+        .catch(() => setInfoMissing(false));
+      // refetchProfile is recreated every render; focus is the real trigger
+    }, [])
+  );
 
-    // Priority 1: username (full_name from profiles table - set during registration)
-    if (profileData.first_name) {
-      return profileData.first_name;
+  const displayName =
+    profileData?.first_name ||
+    profileData?.full_name ||
+    profileData?.email?.split("@")[0] ||
+    null;
+
+  const openActive = () => {
+    if (!activeIncident) return;
+    if (activeIncident.kind === "alert") {
+      navigation.navigate("AlertLive", { id: activeIncident.id });
+    } else {
+      navigation.navigate("ReportLive", { id: activeIncident.id });
     }
-    
-    // Priority 2: first_name (from user_profiles - set in settings)
-    if (profileData.full_name) {
-      return profileData.full_name;
-    }
-
-    // Priority 3: Email (show part before @)
-    if (profileData.email) {
-      return profileData.email.split("@")[0];
-    }
-
-    // Fallback
-    return "User";
   };
 
-  useEffect(() => {
-    if (!supabaseAvailable) {
-      setLoading(false);
-      return;
-    }
-
-    // Check if Supabase is available
-    const checkSupabase = async () => {
-      try {
-        const result = await supabase!.auth.getSession();
-        setSession(result.data?.session || null);
-      } catch (err) {
-        console.error("Error checking session:", err);
-        setSession(null);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    checkSupabase();
-
-    const {
-      data: { subscription },
-    } = supabase!.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [supabaseAvailable]);
-
-  if (loading) {
-    return (
-      <View className="flex-1 justify-center items-center bg-gray-100">
-        <Text className="text-3xl font-bold text-gray-900">Loading...</Text>
-      </View>
-    );
-  }
-
   return (
-    <ScrollView className="flex-1 bg-white">
-      <View className="pt-20">
-       
-        {/* Header */}
-        <View className="flex-row items-center justify-between mb-10 px-4">
-          <View className="flex-row items-center">
-            {/* Avatar */}
-            <View className="h-20 w-20 rounded-full bg-gray-200 items-center justify-center mr-4 overflow-hidden">
-              {profileData?.avatar_url ? (
-                <Image
-                  source={{ uri: profileData.avatar_url }}
-                  className="h-full w-full"
-                  resizeMode="cover"
-                />
-              ) : (
-                <MaterialCommunityIcons
-                  name="account"
-                  size={48}
-                  color="#9CA3AF"
-                />
-              )}
-            </View>
-            
-            <View>
-              <Text className="text-lg font-semibold text-gray-700">Hello!</Text>
-              <Text className="text-3xl font-extrabold text-black">
-                {loadingProfile ? "..." : getDisplayName()}
+    <ScrollView
+      className="flex-1 bg-white"
+      scrollEnabled={!holdingSos}
+      contentContainerStyle={{
+        paddingTop: insets.top + 16,
+        paddingBottom: insets.bottom + 24,
+      }}
+    >
+      <StatusBar style="dark" />
+
+      {/* Header: greeting + account */}
+      <View className="flex-row items-center justify-between px-4">
+        <View className="flex-1 pr-4">
+          <Text className="text-base text-ink-muted">Hello,</Text>
+          <Text
+            className="text-2xl font-extrabold text-ink"
+            numberOfLines={1}
+          >
+            {displayName ?? "there"}
+          </Text>
+        </View>
+        <Pressable
+          onPress={() => navigation.navigate("Account")}
+          accessibilityRole="button"
+          accessibilityLabel="Account and settings"
+          hitSlop={8}
+          className="h-14 w-14 items-center justify-center overflow-hidden rounded-full bg-surface active:opacity-80"
+        >
+          {profileData?.avatar_url ? (
+            <Image
+              source={{ uri: profileData.avatar_url }}
+              className="h-full w-full"
+              resizeMode="cover"
+            />
+          ) : (
+            <MaterialCommunityIcons
+              name="account"
+              size={32}
+              color={colors.ink.subtle}
+            />
+          )}
+        </Pressable>
+      </View>
+
+      {/* An open alert/report always comes first */}
+      {activeIncident ? (
+        <Pressable
+          onPress={openActive}
+          accessibilityRole="button"
+          accessibilityLabel={`Your ${activeIncident.kind} is active: ${
+            STATUS_LABELS[activeIncident.status]
+          }. Open it.`}
+          className="mx-4 mt-6 flex-row items-center rounded-2xl bg-sos-tint p-4 active:opacity-80"
+        >
+          <View className="h-3 w-3 rounded-full bg-sos" />
+          <View className="ml-3 flex-1">
+            <Text className="text-base font-bold text-ink">
+              Your {activeIncident.kind} is active
+            </Text>
+            <Text className="text-sm text-ink-muted">
+              {STATUS_LABELS[activeIncident.status]}
+            </Text>
+          </View>
+          <MaterialCommunityIcons
+            name="chevron-right"
+            size={26}
+            color={colors.ink.muted}
+          />
+        </Pressable>
+      ) : (
+        infoMissing && (
+          <Pressable
+            onPress={() => navigation.navigate("Profile")}
+            accessibilityRole="button"
+            accessibilityLabel="Add your emergency info so responders know who they're helping"
+            className="mx-4 mt-6 flex-row items-center rounded-2xl bg-navy-tint p-4 active:opacity-80"
+          >
+            <MaterialCommunityIcons
+              name="card-account-details-outline"
+              size={26}
+              color={colors.navy.DEFAULT}
+            />
+            <View className="ml-3 flex-1">
+              <Text className="text-base font-bold text-navy">
+                Add your emergency info
+              </Text>
+              <Text className="text-sm leading-5 text-ink-muted">
+                So responders know who you are and how to reach you.
               </Text>
             </View>
-          </View>
-          <TouchableOpacity onPress={() => navigation.navigate("Settings1")}>
             <MaterialCommunityIcons
-              name="cog-outline"
-              size={35}
-              color="#0b376c"
+              name="chevron-right"
+              size={26}
+              color={colors.navy.DEFAULT}
             />
-          </TouchableOpacity>
-        </View>
+          </Pressable>
+        )
+      )}
 
-        {/* Card 1 */}
-        <View className="mt-16 mb-20 px-4">
-          <Text className="text-2xl font-extrabold text-[#0b376c] mb-4">
-            Are you in an emergency?
-          </Text>
-          <Text className="text-md leading-6 text-gray-700 mb-6">
-            Press this button, your live{"\n"}
-            location will be shared to the{"\n"}
-            nearest help centers.
-          </Text>
-
-          <TouchableOpacity
-            activeOpacity={0.8}
-            className="mt-2"
-            onPress={() => navigation.navigate("Alert")}
-          >
-            <View className="relative h-20 justify-center">
-              <View className="absolute left-0 right-0 h-9 bg-gray-300" />
-              <View className="absolute right-6 h-24 w-24 rounded-full bg-[#0b376c] border-[8px] border-gray-200 items-center justify-center">
-                <MaterialCommunityIcons
-                  name="alert-octagon-outline"
-                  size={40}
-                  color="white"
-                />
-              </View>
-            </View>
-          </TouchableOpacity>
-        </View>
-
-        {/* Card 2 */}
-        <View className="mb-20 px-4">
-          <Text className="text-2xl font-extrabold text-[#0b376c] mb-4">
-            Did you witness an emergency?
-          </Text>
-          <Text className="text-md leading-6 text-gray-700 mb-6">
-            Press this button, take a photo of the{"\n"}
-            injury, and wait for assistance from{"\n"}
-            the nearest help center. Your live{"\n"}
-            location will be shared.
-          </Text>
-
-          <TouchableOpacity
-            activeOpacity={0.8}
-            className="mt-2"
-            onPress={() => navigation.navigate("Report1")}
-          >
-            <View className="relative h-20 justify-center">
-              <View className="absolute left-0 right-0 h-9 bg-gray-300" />
-              <View className="absolute right-6 h-24 w-24 rounded-full bg-[#0b376c] border-[8px] border-gray-200 items-center justify-center">
-                <MaterialCommunityIcons
-                  name="alert-circle-outline"
-                  size={40}
-                  color="white"
-                />
-              </View>
-            </View>
-          </TouchableOpacity>
-          
-        </View>
-        {/* Footer */}
-      <View className="bg-blue-900 h-16 rounded-t-xl items-center justify-center">
-        <View className="h-12 w-12 rounded-full bg-white/20 items-center justify-center">
-          <MaterialCommunityIcons
-            name="reddit"
-            size={40}
-            color="white"
+      {/* SOS: hold to send */}
+      <View className="mt-8 items-center px-6">
+        <Text
+          accessibilityRole="header"
+          className="text-center text-2xl font-extrabold text-navy"
+        >
+          Need help now?
+        </Text>
+        <Text className="mt-2 text-center text-base leading-6 text-ink-muted">
+          Hold the SOS button for 2 seconds. Responders will get your alert
+          and location.
+        </Text>
+        <View className="mt-6">
+          <SosHoldButton
+            onSend={() => navigation.navigate("AlertLive")}
+            onHoldChange={setHoldingSos}
           />
         </View>
       </View>
-      </View>
+
+      {/* Report: tap to open the camera */}
+      <Pressable
+        onPress={() => navigation.navigate("Report1")}
+        accessibilityRole="button"
+        accessibilityLabel="Report an emergency"
+        accessibilityHint="Opens the camera so you can send a photo to responders"
+        className="mx-4 mt-10 flex-row items-center rounded-2xl bg-navy p-5 active:bg-navy-dark"
+      >
+        <View className="h-12 w-12 items-center justify-center rounded-full bg-white/15">
+          <MaterialCommunityIcons name="camera" size={26} color="white" />
+        </View>
+        <View className="ml-4 flex-1">
+          <Text className="text-lg font-bold text-white">
+            Report an emergency
+          </Text>
+          <Text className="mt-0.5 text-sm leading-5 text-white/80">
+            Saw someone hurt? Send a photo to responders.
+          </Text>
+        </View>
+        <MaterialCommunityIcons name="chevron-right" size={28} color="white" />
+      </Pressable>
     </ScrollView>
   );
 }

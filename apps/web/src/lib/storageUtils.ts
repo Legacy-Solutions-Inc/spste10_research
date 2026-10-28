@@ -85,8 +85,6 @@ export async function getSignedUrl(
     // Clean the file path - remove any leading slashes
     const cleanPath = filePath.replace(/^\/+/, "");
     
-    console.log(`[storageUtils] Getting signed URL for bucket: ${bucketName}, path: ${cleanPath}`);
-    
     const { data, error } = await supabase.storage
       .from(bucketName)
       .createSignedUrl(cleanPath, expiresIn);
@@ -108,8 +106,6 @@ export async function getSignedUrl(
       }
       return null;
     }
-
-    console.log(`[storageUtils] Successfully got signed URL for ${cleanPath}`);
     return data?.signedUrl || null;
   } catch (err) {
     console.error(`[storageUtils] Exception getting signed URL for ${filePath}:`, err);

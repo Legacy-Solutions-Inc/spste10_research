@@ -1,30 +1,29 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
+import { Loader2, Pencil } from "lucide-react";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
-import { Pencil, Save, X, User, MapPin, Mail, Phone, Loader2 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
-import type { LucideIcon } from "lucide-react";
 
-interface EditableField {
+export interface EditableField {
   label: string;
   value: string | null;
   fieldKey: string;
   type?: "text" | "tel" | "email";
   placeholder?: string;
+  /** Shown but never edited or saved (e.g. the sign-in email). */
   disabled?: boolean;
   validation?: (value: string) => string | null;
   helperText?: string;
-  icon?: LucideIcon;
+  autoComplete?: string;
 }
 
 interface EditableSectionProps {
   title: string;
-  icon?: LucideIcon;
+  description?: string;
   fields: EditableField[];
   onSave: (updates: Record<string, string | null>) => Promise<void>;
   isLoading?: boolean;
@@ -32,7 +31,7 @@ interface EditableSectionProps {
 
 export default function EditableSection({
   title,
-  icon: Icon,
+  description,
   fields,
   onSave,
   isLoading = false,
@@ -41,30 +40,49 @@ export default function EditableSection({
   const [values, setValues] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  // Values just saved, shown until the refreshed server data arrives as props
+  const [savedValues, setSavedValues] = useState<Record<string, string | null> | null>(null);
   const { toast } = useToast();
 
-  // Field icon mapping
-  const getFieldIcon = (fieldKey: string): LucideIcon | undefined => {
-    if (fieldKey.includes("name") || fieldKey === "full_name") return User;
-    if (fieldKey.includes("location") || fieldKey.includes("address") || fieldKey.includes("municipality") || fieldKey.includes("province")) return MapPin;
-    if (fieldKey === "email") return Mail;
-    if (fieldKey.includes("contact") || fieldKey.includes("phone")) return Phone;
-    return undefined;
-  };
+  const idPrefix = useId();
+  const formRef = useRef<HTMLFormElement>(null);
+  const editButtonRef = useRef<HTMLButtonElement>(null);
+  const focusAfterRender = useRef<"first-input" | "edit-button" | null>(null);
+
+  const fieldId = (fieldKey: string) => `${idPrefix}-${fieldKey}`;
+
+  const propsKey = fields.map((field) => field.value ?? "").join("\u0000");
+  useEffect(() => {
+    setSavedValues(null);
+  }, [propsKey]);
+
+  useEffect(() => {
+    if (focusAfterRender.current === "first-input") {
+      formRef.current?.querySelector<HTMLInputElement>("input:not([disabled])")?.focus();
+    } else if (focusAfterRender.current === "edit-button") {
+      editButtonRef.current?.focus();
+    }
+    focusAfterRender.current = null;
+  }, [isEditing]);
+
+  const displayValue = (field: EditableField) =>
+    savedValues && savedValues[field.fieldKey] !== undefined ? savedValues[field.fieldKey] : field.value;
 
   const handleEdit = () => {
     const initialValues: Record<string, string> = {};
     fields.forEach((field) => {
-      initialValues[field.fieldKey] = field.value || "";
+      initialValues[field.fieldKey] = displayValue(field) || "";
     });
     setValues(initialValues);
     setErrors({});
+    focusAfterRender.current = "first-input";
     setIsEditing(true);
   };
 
   const handleCancel = () => {
     setValues({});
     setErrors({});
+    focusAfterRender.current = "edit-button";
     setIsEditing(false);
   };
 
@@ -80,9 +98,10 @@ export default function EditableSection({
     }
   };
 
-  const validateFields = (): boolean => {
+  /** Returns the key of the first invalid field, or null if everything is valid. */
+  const validateFields = (): string | null => {
     const newErrors: Record<string, string> = {};
-    let isValid = true;
+    let firstInvalid: string | null = null;
 
     fields.forEach((field) => {
       const value = values[field.fieldKey] || "";
@@ -90,21 +109,22 @@ export default function EditableSection({
         const error = field.validation(value);
         if (error) {
           newErrors[field.fieldKey] = error;
-          isValid = false;
+          firstInvalid ??= field.fieldKey;
         }
       }
     });
 
     setErrors(newErrors);
-    return isValid;
+    return firstInvalid;
   };
 
-  const handleSave = async () => {
-    if (!validateFields()) {
-      toast({
-        description: "Please fix the errors before saving.",
-        variant: "error",
-      });
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (saving) return;
+
+    const firstInvalid = validateFields();
+    if (firstInvalid) {
+      document.getElementById(fieldId(firstInvalid))?.focus();
       return;
     }
 
@@ -120,17 +140,14 @@ export default function EditableSection({
       });
 
       await onSave(updates);
-      toast({
-        description: "Settings saved successfully!",
-        variant: "success",
-      });
-      setTimeout(() => {
-        setIsEditing(false);
-      }, 500);
+      setSavedValues(updates);
+      toast({ title: "Changes saved", variant: "success" });
+      focusAfterRender.current = "edit-button";
+      setIsEditing(false);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Failed to save settings";
       toast({
-        description: errorMessage,
+        title: "Couldn't save changes",
+        description: error instanceof Error ? error.message : "Check your connection and try again.",
         variant: "error",
       });
     } finally {
@@ -139,135 +156,94 @@ export default function EditableSection({
   };
 
   return (
-    <>
-      <CardHeader className="pb-3 px-4 md:px-6 pt-4 md:pt-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 md:gap-3">
-            {Icon && (
-              <Icon className="w-4 h-4 md:w-5 md:h-5 text-slate-600 dark:text-slate-400" />
-            )}
-            <CardTitle className="text-base md:text-lg font-semibold text-slate-900 dark:text-slate-100">
-              {title}
-            </CardTitle>
+    <Card>
+      <form ref={formRef} onSubmit={handleSubmit} noValidate>
+        <CardHeader className="flex-row items-start justify-between gap-4 space-y-0">
+          <div className="min-w-0 space-y-1">
+            <CardTitle>{title}</CardTitle>
+            {description && <CardDescription>{description}</CardDescription>}
           </div>
           {!isEditing && (
             <Button
+              ref={editButtonRef}
+              type="button"
+              variant="outline"
+              size="sm"
               onClick={handleEdit}
               disabled={isLoading}
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 md:h-9 md:w-9"
+              aria-label={`Edit ${title.toLowerCase()}`}
             >
-              <Pencil className="h-3.5 w-3.5 md:h-4 md:w-4" />
+              <Pencil aria-hidden />
+              Edit
             </Button>
           )}
-        </div>
-      </CardHeader>
+        </CardHeader>
 
-      <CardContent className="space-y-4 px-4 md:px-6 pb-4 md:pb-6">
-        {fields.map((field, index) => {
-          const FieldIcon = field.icon || getFieldIcon(field.fieldKey);
-          
-          return (
-            <div key={field.fieldKey}>
-              {index > 0 && <Separator className="my-3" />}
-              <div className="space-y-1.5">
-                <Label
-                  htmlFor={field.fieldKey}
-                  className="text-xs md:text-sm font-medium text-slate-700 dark:text-slate-300 flex items-center gap-1.5 md:gap-2"
-                >
-                  {FieldIcon && (
-                    <FieldIcon className="w-3.5 h-3.5 md:w-4 md:h-4 text-slate-500 dark:text-slate-400" />
-                  )}
-                  {field.label}
-                </Label>
-                {isEditing ? (
-                  <div className="space-y-1">
+        <CardContent>
+          {isEditing ? (
+            <div className="space-y-4">
+              {fields.map((field) => {
+                const id = fieldId(field.fieldKey);
+                const error = errors[field.fieldKey];
+                const note = error || field.helperText;
+                return (
+                  <div key={field.fieldKey} className="space-y-1.5">
+                    <Label htmlFor={id}>{field.label}</Label>
                     <Input
-                      id={field.fieldKey}
+                      id={id}
                       type={field.type || "text"}
                       value={values[field.fieldKey] || ""}
                       onChange={(e) => handleChange(field.fieldKey, e.target.value)}
                       placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}`}
                       disabled={field.disabled || saving}
-                      className={`text-sm ${
-                        errors[field.fieldKey]
-                          ? "border-red-300 focus:ring-red-500 bg-red-50 dark:bg-red-900/20"
-                          : ""
-                      }`}
+                      autoComplete={field.autoComplete}
+                      aria-invalid={error ? true : undefined}
+                      aria-describedby={note ? `${id}-note` : undefined}
                     />
-                    {errors[field.fieldKey] && (
-                      <p className="text-xs text-red-600 dark:text-red-400">
-                        {errors[field.fieldKey]}
-                      </p>
-                    )}
-                    {field.helperText && !errors[field.fieldKey] && (
-                      <p className="text-xs text-muted-foreground">
-                        {field.helperText}
+                    {note && (
+                      <p id={`${id}-note`} className={error ? "text-13 text-alert" : "text-13 text-muted-foreground"}>
+                        {note}
                       </p>
                     )}
                   </div>
-                ) : (
-                  <div className="space-y-1">
-                    <div
-                      className={`text-xs md:text-sm py-1.5 md:py-2 px-2 md:px-3 rounded-md ${
-                        field.disabled
-                          ? "text-muted-foreground bg-slate-100 dark:bg-slate-700"
-                          : "text-slate-900 dark:text-slate-100 bg-slate-50 dark:bg-slate-700/50"
-                      }`}
-                    >
-                      {field.value || (
-                        <span className="text-muted-foreground italic">Not set</span>
+                );
+              })}
+            </div>
+          ) : (
+            <dl className="divide-y">
+              {fields.map((field) => {
+                const value = displayValue(field);
+                return (
+                  <div
+                    key={field.fieldKey}
+                    className="grid gap-1 py-3 first:pt-0 last:pb-0 sm:grid-cols-[10rem_minmax(0,1fr)] sm:gap-4"
+                  >
+                    <dt className="text-13 text-muted-foreground sm:pt-px">{field.label}</dt>
+                    <dd className="min-w-0 break-words text-sm text-foreground">
+                      {value || <span className="text-muted-foreground">Not set</span>}
+                      {field.disabled && field.helperText && (
+                        <p className="mt-0.5 text-13 text-muted-foreground">{field.helperText}</p>
                       )}
-                    </div>
-                    {field.helperText && (
-                      <p className="text-xs text-muted-foreground">{field.helperText}</p>
-                    )}
+                    </dd>
                   </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </CardContent>
+                );
+              })}
+            </dl>
+          )}
+        </CardContent>
 
-      {isEditing && (
-        <>
-          <Separator />
-          <CardContent className="pt-4 px-4 md:px-6 pb-4 md:pb-6">
-            <div className="flex items-center justify-end gap-2 md:gap-3">
-              <Button
-                onClick={handleCancel}
-                disabled={saving}
-                variant="secondary"
-                size="sm"
-                className="text-xs md:text-sm"
-              >
-                <X className="h-3.5 w-3.5 md:h-4 md:w-4 mr-1.5 md:mr-2" />
-                Cancel
-              </Button>
-              <Button
-                onClick={handleSave}
-                disabled={saving}
-                size="sm"
-                className="min-w-[80px] md:min-w-[100px] text-xs md:text-sm"
-              >
-                {saving ? (
-                  <>
-                    <Loader2 className="h-3.5 w-3.5 md:h-4 md:w-4 mr-1.5 md:mr-2 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <Save className="h-3.5 w-3.5 md:h-4 md:w-4 mr-1.5 md:mr-2" />
-                    Save
-                  </>
-                )}
-              </Button>
-            </div>
-          </CardContent>
-        </>
-      )}
-    </>
+        {isEditing && (
+          <CardFooter className="gap-2 border-t pt-4">
+            <Button type="submit" disabled={saving}>
+              {saving && <Loader2 className="animate-spin" aria-hidden />}
+              {saving ? "Saving…" : "Save changes"}
+            </Button>
+            <Button type="button" variant="ghost" onClick={handleCancel} disabled={saving}>
+              Cancel
+            </Button>
+          </CardFooter>
+        )}
+      </form>
+    </Card>
   );
 }

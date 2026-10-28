@@ -1,532 +1,295 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
-import {
-  Mail,
-  User,
-  MapPin,
-  Phone,
-  Lock,
-  Eye,
-  EyeOff,
-  Loader2,
-  AlertCircle,
-  CheckCircle2,
-  ArrowLeft,
-} from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabaseBrowser";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
+import { AuthField, fieldAria } from "@/components/auth/AuthField";
+import { BackToSignIn } from "@/components/auth/BackToSignIn";
+import { FormNotice } from "@/components/auth/FormNotice";
+import { PasswordInput } from "@/components/auth/PasswordInput";
+import { validatePhoneNumber, validateTextField } from "@/app/settings/utils/validation";
 
-interface FormErrors {
-  email?: string;
-  fullName?: string;
-  municipality?: string;
-  province?: string;
-  officeAddress?: string;
-  contactNumber?: string;
-  password?: string;
-  confirmPassword?: string;
-  general?: string;
-}
+type FieldName =
+  | "officeName"
+  | "municipality"
+  | "province"
+  | "officeAddress"
+  | "contactNumber"
+  | "email"
+  | "password"
+  | "confirmPassword";
+
+type FormErrors = Partial<Record<FieldName | "general", string>>;
+
+// Order matters: the first invalid field in this order gets focus
+const FIELD_ORDER: FieldName[] = [
+  "officeName",
+  "municipality",
+  "province",
+  "officeAddress",
+  "contactNumber",
+  "email",
+  "password",
+  "confirmPassword",
+];
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const OFFICE_NAME_HINT = "The name your office goes by, like MDRRMO San Jose.";
+const PASSWORD_HINT = "At least 6 characters.";
+
+// signUp succeeded but the responder role or access request couldn't be written
+const REQUEST_NOT_SAVED =
+  "Your sign-in account was created, but your office details couldn't be saved, so the access request wasn't filed. Contact your AGAP administrator to finish setting up access for this email address.";
 
 export default function RegisterForm() {
-  const router = useRouter();
-  const [formData, setFormData] = useState({
-    email: "",
-    fullName: "",
+  const [formData, setFormData] = useState<Record<FieldName, string>>({
+    officeName: "",
     municipality: "",
     province: "",
     officeAddress: "",
     contactNumber: "",
+    email: "",
     password: "",
     confirmPassword: "",
   });
   const [errors, setErrors] = useState<FormErrors>({});
-  const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  // Set once the request is saved; null while the form is showing
+  const [sent, setSent] = useState<{ email: string; needsEmailConfirmation: boolean } | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  const sentHeadingRef = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    if (sent) sentHeadingRef.current?.focus();
+  }, [sent]);
 
   const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const input = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [input.name]: input.value,
-    }));
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
 
-    // Clear field-specific error when user starts typing
-    if (errors[input.name as keyof FormErrors]) {
+    if (errors[name as FieldName] || errors.general) {
       setErrors((prev) => {
-        const newErrors = { ...prev };
-        delete newErrors[input.name as keyof FormErrors];
-        return newErrors;
+        const next = { ...prev };
+        delete next[name as FieldName];
+        delete next.general;
+        return next;
       });
     }
-
-    // Clear general error
-    if (errors.general) {
-      setErrors((prev) => {
-        const newErrors = { ...prev };
-        delete newErrors.general;
-        return newErrors;
-      });
-    }
-
-    if (success) setSuccess("");
   };
 
   const validateForm = (): boolean => {
-    const newErrors: FormErrors = {};
+    const next: FormErrors = {};
+    const value = (field: FieldName) => formData[field].trim();
 
-    // Email validation
-    if (!formData.email) {
-      newErrors.email = "Email is required";
-    } else {
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(formData.email)) {
-        newErrors.email = "Please enter a valid email address";
-      }
+    if (!value("officeName")) next.officeName = "Enter your office's name.";
+    else next.officeName = validateTextField(value("officeName"), "Office name") ?? undefined;
+
+    if (!value("municipality")) next.municipality = "Enter the municipality or city.";
+    if (!value("province")) next.province = "Enter the province.";
+
+    if (!value("officeAddress")) next.officeAddress = "Enter the office's street address.";
+    else next.officeAddress = validateTextField(value("officeAddress"), "Office address") ?? undefined;
+
+    if (!value("contactNumber")) next.contactNumber = "Enter a number where the office can be reached.";
+    else next.contactNumber = validatePhoneNumber(value("contactNumber")) ?? undefined;
+
+    if (!value("email")) next.email = "Enter an email address.";
+    else if (!EMAIL_PATTERN.test(value("email"))) next.email = "Enter a valid email address, like name@example.com.";
+
+    if (!formData.password) next.password = "Create a password.";
+    else if (formData.password.length < 6) next.password = "Use at least 6 characters.";
+
+    if (!formData.confirmPassword) next.confirmPassword = "Enter the password again.";
+    else if (formData.password !== formData.confirmPassword) next.confirmPassword = "Passwords don't match.";
+
+    const firstInvalid = FIELD_ORDER.find((field) => next[field]);
+    const cleaned = Object.fromEntries(Object.entries(next).filter(([, message]) => message)) as FormErrors;
+    setErrors(cleaned);
+
+    if (firstInvalid) {
+      formRef.current?.querySelector<HTMLInputElement>(`#${firstInvalid}`)?.focus();
+      return false;
     }
-
-    // Password validation
-    if (!formData.password) {
-      newErrors.password = "Password is required";
-    } else if (formData.password.length < 6) {
-      newErrors.password = "Password must be at least 6 characters";
-    }
-
-    // Confirm password validation
-    if (!formData.confirmPassword) {
-      newErrors.confirmPassword = "Please confirm your password";
-    } else if (formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = "Passwords do not match";
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    return true;
   };
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setErrors({});
-    setSuccess("");
 
-    if (!validateForm()) {
-      return;
-    }
+    if (!validateForm()) return;
 
     setLoading(true);
 
-    // Check if all responder fields are provided
-    const isResponderRegistration =
-      formData.municipality &&
-      formData.province &&
-      formData.officeAddress &&
-      formData.contactNumber;
+    const officeName = formData.officeName.trim();
+    const email = formData.email.trim();
 
     try {
       const supabase = createClient();
 
-      // Sign up the user
+      // The database files the access request from this metadata when the account is
+      // created (handle_new_user), so it works even before the email is confirmed.
       const { data, error: signUpError } = await supabase.auth.signUp({
-        email: formData.email,
+        email,
         password: formData.password,
         options: {
           data: {
-            full_name: formData.fullName || null,
+            full_name: officeName,
+            requested_role: "responder",
+            municipality: formData.municipality.trim(),
+            province: formData.province.trim(),
+            office_address: formData.officeAddress.trim(),
+            contact_number: formData.contactNumber.trim(),
           },
         },
       });
 
       if (signUpError) {
-        setErrors({
-          general: signUpError.message || "Failed to create account",
-        });
+        setErrors({ general: signUpError.message || "Couldn't create the account. Try again in a moment." });
         setLoading(false);
         return;
       }
 
-      if (data.user) {
-        // Update profile with full_name if provided
-        if (formData.fullName) {
-          await supabase
-            .from("profiles")
-            // @ts-ignore - Supabase types may not be fully generated
-            .update({ full_name: formData.fullName })
-            .eq("id", data.user.id);
-        }
-
-        // If all responder fields are provided, create responder profile
-        if (isResponderRegistration) {
-          // Update profile role to 'responder'
-          await supabase
-            .from("profiles")
-            // @ts-ignore - Supabase types may not be fully generated
-            .update({ role: "responder" })
-            .eq("id", data.user.id);
-
-          // Create responder_profiles record with status='pending'
-          const { error: responderProfileError } = await supabase
-            .from("responder_profiles")
-            // @ts-ignore - Supabase types may not be fully generated
-            .insert({
-              id: data.user.id,
-              municipality: formData.municipality,
-              province: formData.province,
-              office_address: formData.officeAddress,
-              contact_number: formData.contactNumber,
-              account_status: "pending",
-            });
-
-          if (responderProfileError) {
-            console.error("Error creating responder profile:", responderProfileError);
-            // Don't fail the registration, but log the error
-          }
-
-          setSuccess(
-            "Account created! Your responder account is pending admin approval. You will be able to login once approved."
-          );
-        } else {
-          setSuccess("Account created! Please check your email to confirm your account.");
-        }
-
-        // Redirect to login after a short delay
-        setTimeout(() => {
-          router.push("/login");
-        }, 2000);
+      if (!data.user) {
+        setErrors({ general: "Couldn't create the account. Try again in a moment." });
+        setLoading(false);
+        return;
       }
+
+      // With a session (email confirmation off) we can confirm the request was filed
+      if (data.session) {
+        const { data: profile } = await supabase.from("profiles").select("role").eq("id", data.user.id).maybeSingle();
+        if ((profile as { role: string } | null)?.role !== "responder") {
+          await supabase.auth.signOut();
+          setErrors({ general: REQUEST_NOT_SAVED });
+          setLoading(false);
+          return;
+        }
+      }
+
+      // A pending office shouldn't stay signed in (only happens when email confirmation is off)
+      if (data.session) {
+        await supabase.auth.signOut();
+      }
+
+      setSent({ email, needsEmailConfirmation: !data.session });
+      setLoading(false);
     } catch (err) {
-      setErrors({
-        general: "An unexpected error occurred. Please try again.",
-      });
       console.error("Registration error:", err);
+      setErrors({ general: "Couldn't reach AGAP. Check your internet connection and try again." });
       setLoading(false);
     }
   };
 
-  return (
-    <div className="w-full">
-      {/* Header */}
-      <div className="space-y-2 mb-6">
-        <h2 className="text-3xl md:text-4xl font-extrabold text-slate-800">
-          Create an Account
-        </h2>
-        <p className="text-base text-slate-600">
-          Responders must be verified by admin before login
+  if (sent) {
+    return (
+      <div>
+        <h1 ref={sentHeadingRef} tabIndex={-1} className="text-28 font-semibold text-foreground focus:outline-none">
+          Request sent
+        </h1>
+
+        {sent.needsEmailConfirmation && (
+          <FormNotice tone="info" title="Confirm your email address first" className="mt-6">
+            We sent a confirmation link to <span className="font-medium text-foreground">{sent.email}</span>. Open
+            it to verify the address.
+          </FormNotice>
+        )}
+
+        <p className="mt-6 text-sm text-muted-foreground">
+          An AGAP administrator reviews every access request. You&apos;ll be able to sign in as soon as your office is
+          approved.
         </p>
+
+        <Button asChild size="lg" className="mt-8 w-full">
+          <Link href="/">Back to sign in</Link>
+        </Button>
       </div>
+    );
+  }
 
-      {/* Back to Login Link */}
-      <Link
-        href="/login"
-        className="inline-flex items-center gap-2 text-sm text-slate-600 hover:text-slate-800 transition-colors mb-6"
-      >
-        <ArrowLeft className="w-4 h-4" />
-        Back to login
-      </Link>
+  // Shared props for every input; all fields are required
+  const field = (name: FieldName, hint?: string) => ({
+    id: name,
+    name,
+    value: formData[name],
+    onChange: handleChange,
+    disabled: loading,
+    required: true,
+    ...fieldAria(name, errors[name], hint),
+  });
 
-      {/* Form Card */}
-      <form
-        onSubmit={handleSubmit}
-        className="bg-white shadow-xl rounded-2xl p-6 md:p-8 space-y-6"
-      >
-        {/* Section 1: Account Information */}
-        <div className="space-y-5">
-          <h3 className="text-lg font-semibold text-slate-800 border-b border-slate-200 pb-2">
-            Account Information
-          </h3>
+  return (
+    <div>
+      <BackToSignIn />
 
-          {/* Email Field */}
-          <div className="space-y-2">
-            <label htmlFor="email" className="block text-sm font-medium text-slate-700">
-              Email <span className="text-red-500">*</span>
-            </label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-              <input
-                id="email"
-                type="email"
-                name="email"
-                placeholder="Enter your email"
-                value={formData.email}
-                onChange={handleChange}
-                autoFocus
-                required
-                aria-invalid={!!errors.email}
-                aria-describedby={errors.email ? "email-error" : undefined}
-                className={`w-full pl-10 pr-4 py-3 border rounded-xl text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
-                  errors.email
-                    ? "border-red-300 bg-red-50 focus:ring-red-500"
-                    : "border-slate-300 bg-white hover:border-slate-400"
-                }`}
-              />
-            </div>
-            {errors.email && (
-              <p
-                id="email-error"
-                className="flex items-center gap-1 text-sm text-red-600"
-              >
-                <AlertCircle className="w-4 h-4" />
-                {errors.email}
-              </p>
-            )}
+      <h1 className="mt-6 text-28 font-semibold text-foreground">Request access</h1>
+      <p className="mt-2 text-sm text-muted-foreground">
+        Register your response office. An AGAP administrator reviews each request before the office can sign in.
+      </p>
+
+      <form ref={formRef} method="post" onSubmit={handleSubmit} noValidate className="mt-8 space-y-8">
+        <fieldset className="space-y-5">
+          <legend className="text-base font-semibold text-foreground">Office details</legend>
+
+          <AuthField id="officeName" label="Office name" error={errors.officeName} hint={OFFICE_NAME_HINT}>
+            <Input {...field("officeName", OFFICE_NAME_HINT)} autoComplete="organization" />
+          </AuthField>
+
+          <div className="grid gap-5 sm:grid-cols-2">
+            <AuthField id="municipality" label="Municipality or city" error={errors.municipality}>
+              <Input {...field("municipality")} autoComplete="address-level2" />
+            </AuthField>
+            <AuthField id="province" label="Province" error={errors.province}>
+              <Input {...field("province")} autoComplete="address-level1" />
+            </AuthField>
           </div>
 
-          {/* Full Name Field */}
-          <div className="space-y-2">
-            <label htmlFor="fullName" className="block text-sm font-medium text-slate-700">
-              Full Name <span className="text-slate-400 text-xs">(optional)</span>
-            </label>
-            <div className="relative">
-              <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-              <input
-                id="fullName"
-                type="text"
-                name="fullName"
-                placeholder="Enter the name of the office"
-                value={formData.fullName}
-                onChange={handleChange}
-                aria-describedby={errors.fullName ? "fullName-error" : undefined}
-                className={`w-full pl-10 pr-4 py-3 border rounded-xl text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
-                  errors.fullName
-                    ? "border-red-300 bg-red-50 focus:ring-red-500"
-                    : "border-slate-300 bg-white hover:border-slate-400"
-                }`}
-              />
-            </div>
-            {errors.fullName && (
-              <p
-                id="fullName-error"
-                className="flex items-center gap-1 text-sm text-red-600"
-              >
-                <AlertCircle className="w-4 h-4" />
-                {errors.fullName}
-              </p>
-            )}
-          </div>
-        </div>
+          <AuthField id="officeAddress" label="Office address" error={errors.officeAddress}>
+            <Input {...field("officeAddress")} autoComplete="street-address" />
+          </AuthField>
 
-        {/* Section 2: Contact Information */}
-        <div className="space-y-5">
-          <h3 className="text-lg font-semibold text-slate-800 border-b border-slate-200 pb-2">
-            Contact Information <span className="text-sm font-normal text-slate-500">(for responders)</span>
-          </h3>
+          <AuthField id="contactNumber" label="Contact number" error={errors.contactNumber}>
+            <Input {...field("contactNumber")} type="tel" inputMode="tel" autoComplete="tel" />
+          </AuthField>
+        </fieldset>
 
-          {/* Municipality Field */}
-          <div className="space-y-2">
-            <label htmlFor="municipality" className="block text-sm font-medium text-slate-700">
-              Municipality
-            </label>
-            <div className="relative">
-              <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-              <input
-                id="municipality"
-                type="text"
-                name="municipality"
-                placeholder="Enter your municipality"
-                value={formData.municipality}
-                onChange={handleChange}
-                className="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-xl text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-white hover:border-slate-400"
-              />
-            </div>
-          </div>
+        <Separator />
 
-          {/* Province Field */}
-          <div className="space-y-2">
-            <label htmlFor="province" className="block text-sm font-medium text-slate-700">
-              Province
-            </label>
-            <div className="relative">
-              <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-              <input
-                id="province"
-                type="text"
-                name="province"
-                placeholder="Enter your province"
-                value={formData.province}
-                onChange={handleChange}
-                className="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-xl text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-white hover:border-slate-400"
-              />
-            </div>
-          </div>
+        <fieldset className="space-y-5">
+          <legend className="text-base font-semibold text-foreground">Sign-in details</legend>
 
-          {/* Office Address Field */}
-          <div className="space-y-2">
-            <label htmlFor="officeAddress" className="block text-sm font-medium text-slate-700">
-              Office Address
-            </label>
-            <div className="relative">
-              <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-              <input
-                id="officeAddress"
-                type="text"
-                name="officeAddress"
-                placeholder="Enter your office address"
-                value={formData.officeAddress}
-                onChange={handleChange}
-                className="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-xl text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-white hover:border-slate-400"
-              />
-            </div>
-          </div>
+          <AuthField id="email" label="Email" error={errors.email}>
+            <Input {...field("email")} type="email" inputMode="email" autoComplete="email" />
+          </AuthField>
 
-          {/* Contact Number Field */}
-          <div className="space-y-2">
-            <label htmlFor="contactNumber" className="block text-sm font-medium text-slate-700">
-              Contact Number
-            </label>
-            <div className="relative">
-              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-              <input
-                id="contactNumber"
-                type="tel"
-                name="contactNumber"
-                placeholder="Enter your contact number"
-                value={formData.contactNumber}
-                onChange={handleChange}
-                className="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-xl text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-white hover:border-slate-400"
-              />
-            </div>
-          </div>
-        </div>
+          <AuthField id="password" label="Password" error={errors.password} hint={PASSWORD_HINT}>
+            <PasswordInput {...field("password", PASSWORD_HINT)} autoComplete="new-password" />
+          </AuthField>
 
-        {/* Section 3: Security */}
-        <div className="space-y-5">
-          <h3 className="text-lg font-semibold text-slate-800 border-b border-slate-200 pb-2">
-            Security
-          </h3>
+          <AuthField id="confirmPassword" label="Confirm password" error={errors.confirmPassword}>
+            <PasswordInput {...field("confirmPassword")} autoComplete="new-password" />
+          </AuthField>
+        </fieldset>
 
-          {/* Password Field */}
-          <div className="space-y-2">
-            <label htmlFor="password" className="block text-sm font-medium text-slate-700">
-              Password <span className="text-red-500">*</span>
-            </label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-              <input
-                id="password"
-                type={showPassword ? "text" : "password"}
-                name="password"
-                placeholder="Enter your password (min. 6 characters)"
-                value={formData.password}
-                onChange={handleChange}
-                required
-                minLength={6}
-                aria-invalid={!!errors.password}
-                aria-describedby={errors.password ? "password-error" : undefined}
-                className={`w-full pl-10 pr-12 py-3 border rounded-xl text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
-                  errors.password
-                    ? "border-red-300 bg-red-50 focus:ring-red-500"
-                    : "border-slate-300 bg-white hover:border-slate-400"
-                }`}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-                aria-label={showPassword ? "Hide password" : "Show password"}
-              >
-                {showPassword ? (
-                  <EyeOff className="w-5 h-5" />
-                ) : (
-                  <Eye className="w-5 h-5" />
-                )}
-              </button>
-            </div>
-            {errors.password && (
-              <p
-                id="password-error"
-                className="flex items-center gap-1 text-sm text-red-600"
-              >
-                <AlertCircle className="w-4 h-4" />
-                {errors.password}
-              </p>
-            )}
-          </div>
+        {errors.general && <FormNotice tone="error">{errors.general}</FormNotice>}
 
-          {/* Confirm Password Field */}
-          <div className="space-y-2">
-            <label htmlFor="confirmPassword" className="block text-sm font-medium text-slate-700">
-              Confirm Password <span className="text-red-500">*</span>
-            </label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-              <input
-                id="confirmPassword"
-                type={showConfirmPassword ? "text" : "password"}
-                name="confirmPassword"
-                placeholder="Confirm your password"
-                value={formData.confirmPassword}
-                onChange={handleChange}
-                required
-                minLength={6}
-                aria-invalid={!!errors.confirmPassword}
-                aria-describedby={errors.confirmPassword ? "confirmPassword-error" : undefined}
-                className={`w-full pl-10 pr-12 py-3 border rounded-xl text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
-                  errors.confirmPassword
-                    ? "border-red-300 bg-red-50 focus:ring-red-500"
-                    : "border-slate-300 bg-white hover:border-slate-400"
-                }`}
-              />
-              <button
-                type="button"
-                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-                aria-label={showConfirmPassword ? "Hide password" : "Show password"}
-              >
-                {showConfirmPassword ? (
-                  <EyeOff className="w-5 h-5" />
-                ) : (
-                  <Eye className="w-5 h-5" />
-                )}
-              </button>
-            </div>
-            {errors.confirmPassword && (
-              <p
-                id="confirmPassword-error"
-                className="flex items-center gap-1 text-sm text-red-600"
-              >
-                <AlertCircle className="w-4 h-4" />
-                {errors.confirmPassword}
-              </p>
-            )}
-          </div>
-        </div>
-
-        {/* General Error */}
-        {errors.general && (
-          <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-xl">
-            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
-            <p className="text-sm text-red-600">{errors.general}</p>
-          </div>
-        )}
-
-        {/* Success Message */}
-        {success && (
-          <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-xl">
-            <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0" />
-            <p className="text-sm text-green-600">{success}</p>
-          </div>
-        )}
-
-        {/* Submit Button */}
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl shadow-md py-3 px-6 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-        >
+        <Button type="submit" size="lg" className="w-full" disabled={loading}>
           {loading ? (
             <>
-              <Loader2 className="w-5 h-5 animate-spin" />
-              <span>Creating Account...</span>
+              <Loader2 className="animate-spin" aria-hidden="true" />
+              Sending request…
             </>
           ) : (
-            <span>Create Account</span>
+            "Send request"
           )}
-        </button>
+        </Button>
       </form>
     </div>
   );
 }
-

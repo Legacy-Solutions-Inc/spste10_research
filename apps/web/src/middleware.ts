@@ -79,14 +79,13 @@ export async function middleware(req: NextRequest) {
   const pathname = req.nextUrl.pathname;
 
   // Public routes that don't require authentication
-  const publicRoutes = ["/", "/login", "/register", "/forgot-password"];
+  const publicRoutes = ["/", "/login", "/register", "/forgot-password", "/reset-password"];
   const isPublicRoute = publicRoutes.includes(pathname);
 
-  // // If user is not authenticated and trying to access protected route
-  // if (!user && !isPublicRoute) {
-  //   console.log("[middleware] Unauthenticated user trying to access:", pathname);
-  //   return NextResponse.redirect(new URL("/", req.url));
-  // }
+  // Signed-out visitors only get the public pages
+  if (!user && !isPublicRoute) {
+    return NextResponse.redirect(new URL("/", req.url));
+  }
 
   // If user is authenticated, handle routing based on role
   if (user) {
@@ -123,7 +122,7 @@ export async function middleware(req: NextRequest) {
         if (accountStatus === "pending" || accountStatus === "rejected") {
           // console.log("[middleware] Responder account not approved:", accountStatus);
           await supabase.auth.signOut();
-          return NextResponse.redirect(new URL("/", req.url));
+          return NextResponse.redirect(new URL(`/?notice=${accountStatus}`, req.url));
         }
       }
     }
@@ -171,7 +170,8 @@ export const config = {
      * - favicon.ico (favicon file)
      * - public (public files)
      * - api (API routes)
+     * - app icon and other static images (so signed-out pages can load them)
      */
-    "/((?!_next/static|_next/image|favicon.ico|public|api).*)",
+    "/((?!_next/static|_next/image|favicon.ico|public|api|icon\\.svg|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };

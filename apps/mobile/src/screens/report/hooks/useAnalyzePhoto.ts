@@ -20,7 +20,7 @@ export function useAnalyzePhoto() {
     setLoading(true);
     setError(null);
 
-    let timeoutId: NodeJS.Timeout | null = null;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
     
     try {
       // Set timeout for the analysis (30 seconds)
