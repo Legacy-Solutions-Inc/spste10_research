@@ -3,8 +3,8 @@ import { redirect } from "next/navigation";
 import HistoryClient from "./HistoryClient";
 
 export const metadata = {
-  title: "AGAP - History",
-  description: "View past emergency incidents",
+  title: "History",
+  description: "Incidents your office accepted or declined",
 };
 
 export default async function HistoryPage() {
