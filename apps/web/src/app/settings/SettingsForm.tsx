@@ -87,6 +87,14 @@ export default function SettingsForm({ initialData, userEmail, role }: SettingsF
 
       if (Object.keys(responderFields).length > 0) {
         await updateOwnResponderProfile(supabase, userId, responderFields);
+
+        // The saved map location belongs to the old address; clear it so the dashboard
+        // looks the office up again. Best effort: older databases don't have these columns.
+        await supabase
+          .from("responder_profiles")
+          // @ts-ignore - generated types lack Relationships, so Update resolves to never
+          .update({ office_latitude: null, office_longitude: null })
+          .eq("id", userId);
       }
     }
 

@@ -46,11 +46,10 @@ export function useResponderLocation(): ResponderLocation {
           return;
         }
 
-        // Fetch responder profile
-        // @ts-ignore - Supabase types may not be fully generated
+        // select("*") so this keeps working on databases without the saved-location columns
         const { data: responderProfileRaw, error: profileError } = await supabase
           .from("responder_profiles")
-          .select("office_address, municipality, province")
+          .select("*")
           .eq("id", user.id)
           .single();
 
@@ -65,11 +64,21 @@ export function useResponderLocation(): ResponderLocation {
           office_address: string | null;
           municipality: string | null;
           province: string | null;
+          office_latitude?: number | null;
+          office_longitude?: number | null;
         } | null;
 
         const responderProfile = responderProfileRaw as ResponderProfileData;
 
         if (!responderProfile) {
+          setLoading(false);
+          return;
+        }
+
+        // Use the location saved by an earlier lookup
+        if (typeof responderProfile.office_latitude === "number" && typeof responderProfile.office_longitude === "number") {
+          setCoordinates([responderProfile.office_latitude, responderProfile.office_longitude]);
+          setLocated(true);
           setLoading(false);
           return;
         }
@@ -101,6 +110,16 @@ export function useResponderLocation(): ResponderLocation {
           const newCoordinates: [number, number] = [geocodeResult.latitude, geocodeResult.longitude];
           setCoordinates(newCoordinates);
           setLocated(true);
+
+          // Save it so the address isn't looked up again on every load (Nominatim's usage
+          // policy). Only possible once the office_latitude/longitude columns exist.
+          if ("office_latitude" in responderProfile) {
+            await supabase
+              .from("responder_profiles")
+              // @ts-ignore - Supabase types may not be fully generated
+              .update({ office_latitude: newCoordinates[0], office_longitude: newCoordinates[1] })
+              .eq("id", user.id);
+          }
         } else {
           setError("Failed to geocode address");
           // Keep default coordinates

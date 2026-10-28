@@ -14,6 +14,14 @@ const CAMERA_PATH =
 const BUILDING_PATH =
   '<path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/>';
 
+// OpenStreetMap's own tiles are fine for development and demos but not for production
+// traffic (tile usage policy). For a pilot, point these at a keyed provider such as
+// Stadia Maps or MapTiler (free tiers): NEXT_PUBLIC_MAP_TILE_URL / NEXT_PUBLIC_MAP_TILE_ATTRIBUTION.
+const TILE_URL = process.env.NEXT_PUBLIC_MAP_TILE_URL || "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+const TILE_ATTRIBUTION =
+  process.env.NEXT_PUBLIC_MAP_TILE_ATTRIBUTION ||
+  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+
 type PinVariant = "alert" | "report" | "active";
 
 const iconCache = new Map<string, L.DivIcon>();
@@ -141,10 +149,7 @@ export default function IncidentMap({
       doubleClickZoom={interactive}
       style={{ height: "100%", width: "100%" }}
     >
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
+      <TileLayer attribution={TILE_ATTRIBUTION} url={TILE_URL} maxZoom={19} />
       {interactive && <ZoomControl position="bottomright" />}
       <InvalidateOnResize />
       <FitToPins points={points} fitKey={fitKey} leftInset={leftInset} />
