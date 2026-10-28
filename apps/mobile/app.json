@@ -3,6 +3,7 @@
     "name": "AGAP",
     "slug": "mobile",
     "version": "1.0.0",
+    "icon": "./assets/icon.png",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "assetBundlePatterns": [
@@ -14,7 +15,8 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0b376c"
       },
       "package": "com.spste10.mobile"
     },
@@ -29,11 +31,16 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#ffffff",
-          "resizeMode": "contain"
+          "image": "./assets/splash.png",
+          "imageWidth": 160,
+          "resizeMode": "contain",
+          "backgroundColor": "#0b376c"
         }
       ],
       "@react-native-community/datetimepicker"
-    ]
+    ],
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
   }
 }
