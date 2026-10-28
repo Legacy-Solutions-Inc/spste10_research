@@ -7,6 +7,6 @@ export const metadata: Metadata = {
 };
 
 export default function AdminPage() {
-  // Authentication and authorization checks are handled by middleware
+  // Role is checked by middleware and again in admin/layout.tsx
   return <AdminClient />;
 }
