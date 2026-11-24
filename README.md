@@ -131,6 +131,16 @@ Type check all apps:
 pnpm typecheck
 ```
 
+### Test
+
+Run the web app's tests (Vitest 5, which needs Node.js 22.12+, 24 or 26+):
+
+```bash
+pnpm --filter web test
+```
+
+Tests live in `apps/web/test/`. They call API route handlers directly and stub outbound `fetch`, so they need no running server, network access or API keys.
+
 ## Workspace Aliases
 
 The monorepo uses workspace aliases for shared packages:
