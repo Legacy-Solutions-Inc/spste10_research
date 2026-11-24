@@ -28,6 +28,11 @@ function analyzePhoto(body: RequestBody, headers?: Record<string, string>) {
   return POST(postRequest("/api/analyze-photo", body, headers));
 }
 
+/** An OpenAI chat response that describes the photo. */
+function aiAnswer(description: string): Response {
+  return Response.json({ choices: [{ message: { content: description } }] });
+}
+
 /**
  * Stubs the AI to answer every request with the given description. Returns
  * the image URLs it was sent, one per request.
@@ -37,12 +42,30 @@ function stubAI(description: string): string[] {
   stubFetch({
     [OPENAI_CHAT_URL]: async (request) => {
       imageUrls.push(imageUrlIn(await request.json()));
-      return Response.json({
-        choices: [{ message: { content: description } }],
-      });
+      return aiAnswer(description);
     },
   });
   return imageUrls;
+}
+
+/**
+ * Stubs an AI that answers with the given description after a delay. As with
+ * a real fetch, the request fails instead if it is cancelled first.
+ */
+function stubSlowAI(description: string, delayMs: number) {
+  stubFetch({
+    [OPENAI_CHAT_URL]: (request) =>
+      new Promise((resolve, reject) => {
+        const answerTimer = setTimeout(
+          () => resolve(aiAnswer(description)),
+          delayMs
+        );
+        request.signal.addEventListener("abort", () => {
+          clearTimeout(answerTimer);
+          reject(request.signal.reason);
+        });
+      }),
+  });
 }
 
 /** The image URL in an OpenAI chat request body. */
@@ -169,5 +192,84 @@ describe("POST /api/analyze-photo", () => {
 
     expect(response.status).toBe(502);
     expect(await response.json()).toEqual({ error: expect.any(String) });
+  });
+
+  it.each([
+    [
+      401,
+      "Incorrect API key provided: sk-proj-****wxyz. You can find your API key at https://platform.openai.com/account/api-keys.",
+    ],
+    [
+      429,
+      "Rate limit reached for gpt-4o-mini in organization org-Q7xK2mP9 on requests per min (RPM): Limit 3, Used 3, Requested 1.",
+    ],
+    [
+      500,
+      "The server had an error while processing your request. Sorry about that!",
+    ],
+  ])(
+    "returns 502 without the provider's message when the AI returns %s",
+    async (providerStatus, providerMessage) => {
+      stubFetch({
+        [OPENAI_CHAT_URL]: () =>
+          Response.json(
+            { error: { message: providerMessage } },
+            { status: providerStatus }
+          ),
+      });
+
+      const response = await analyzePhoto({
+        json: { image: TINY_JPEG_BASE64 },
+      });
+
+      const body = await response.text();
+      expect(response.status).toBe(502);
+      expect(JSON.parse(body)).toEqual({ error: expect.any(String) });
+      expect(body).not.toContain(providerMessage);
+      expect(body).not.toMatch(/sk-|org-/); // no API key or organization ID
+    }
+  );
+
+  it("returns 502 without the cause when the AI can't be reached", async () => {
+    stubFetch({
+      [OPENAI_CHAT_URL]: () => {
+        throw new TypeError("fetch failed");
+      },
+    });
+
+    const response = await analyzePhoto({ json: { image: TINY_JPEG_BASE64 } });
+
+    const body = await response.text();
+    expect(response.status).toBe(502);
+    expect(JSON.parse(body)).toEqual({ error: expect.any(String) });
+    expect(body).not.toContain("fetch failed");
+  });
+
+  it("returns 502 when the AI hasn't answered after 25 seconds", async () => {
+    vi.useFakeTimers();
+    stubSlowAI(AI_DESCRIPTION, 30_000);
+
+    const pendingResponse = analyzePhoto({
+      json: { image: TINY_JPEG_BASE64 },
+    });
+    await vi.advanceTimersByTimeAsync(25_000);
+    const response = await pendingResponse;
+
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({ error: expect.any(String) });
+  });
+
+  it("returns 200 with the description when the AI answers just before 25 seconds", async () => {
+    vi.useFakeTimers();
+    stubSlowAI(AI_DESCRIPTION, 24_999);
+
+    const pendingResponse = analyzePhoto({
+      json: { image: TINY_JPEG_BASE64 },
+    });
+    await vi.advanceTimersByTimeAsync(24_999);
+    const response = await pendingResponse;
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ description: AI_DESCRIPTION });
   });
 });

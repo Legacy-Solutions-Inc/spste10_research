@@ -6,6 +6,13 @@
 
 import { NextRequest, NextResponse } from "next/server";
 
+// Run time asked of the host, in seconds: the AI timeout plus headroom, so a
+// slow but successful AI call isn't cut off by the default limit.
+export const maxDuration = 30;
+
+// How long to wait for the AI before cancelling the request.
+const AI_TIMEOUT_MS = 25_000;
+
 const SYSTEM_PROMPT = `You are an emergency medical responder analyzing a photo of an emergency situation. Your task is to provide a clear, professional description that will help first responders understand the situation quickly.
 
 Guidelines for your analysis:
@@ -69,6 +76,18 @@ function detectImageType(base64Image: string): ImageMimeType | null {
   return match?.mimeType ?? null;
 }
 
+/**
+ * The response when the AI returns an error status, can't be reached or
+ * times out. It never includes the provider's own error text; the caller logs
+ * the detail for the server logs instead.
+ */
+function aiCallFailed() {
+  return NextResponse.json(
+    { error: "AI service unavailable" },
+    { status: 502 }
+  );
+}
+
 export async function POST(request: NextRequest) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
@@ -109,8 +128,22 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // The fetch rejects with this abort reason, so the log says why it failed.
+  const aiRequest = new AbortController();
+  const aiTimeout = setTimeout(
+    () =>
+      aiRequest.abort(
+        new DOMException(
+          `No answer from the AI within ${AI_TIMEOUT_MS / 1000} seconds`,
+          "TimeoutError"
+        )
+      ),
+    AI_TIMEOUT_MS
+  );
+
   try {
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      signal: aiRequest.signal,
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -143,10 +176,10 @@ export async function POST(request: NextRequest) {
       const message =
         (errData as { error?: { message?: string } })?.error?.message ||
         response.statusText;
-      return NextResponse.json(
-        { error: message },
-        { status: response.status }
+      console.error(
+        `[API analyze-photo] AI provider returned ${response.status}: ${message}`
       );
+      return aiCallFailed();
     }
 
     const data = (await response.json()) as {
@@ -154,6 +187,7 @@ export async function POST(request: NextRequest) {
     };
     const content = data?.choices?.[0]?.message?.content?.trim();
     if (!content) {
+      console.error("[API analyze-photo] AI response had no description");
       return NextResponse.json(
         { error: "Invalid response from AI service" },
         { status: 502 }
@@ -162,10 +196,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ description: content });
   } catch (error) {
-    console.error("[API analyze-photo] Error:", error);
-    return NextResponse.json(
-      { error: "Failed to analyze photo" },
-      { status: 500 }
-    );
+    console.error("[API analyze-photo] AI request failed:", error);
+    return aiCallFailed();
+  } finally {
+    clearTimeout(aiTimeout);
   }
 }
