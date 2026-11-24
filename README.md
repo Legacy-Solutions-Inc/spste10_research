@@ -177,6 +177,29 @@ import { supabaseWeb, supabaseMobile } from "@repo/core";
   - React Navigation stack navigator
   - Placeholder login and home screens
 
+## Photo descriptions (`/api/analyze-photo`)
+
+The mobile app sends a resized copy of each Report photo to the web app's `POST /api/analyze-photo`, which asks OpenAI to describe it for responders. The AI calls are paid from the project's OpenAI account, so the endpoint is locked down:
+
+- **It requires a signed-in session.** Every request needs `Authorization: Bearer <Supabase access token>`; the mobile app sends the signed-in citizen's token. Without one the endpoint returns 401. Don't remove this check: without it, anyone who finds the URL can spend the AI budget.
+- **It enforces two limits:**
+  - 10 descriptions per person per rolling hour;
+  - 300 across everyone per rolling 24 hours, as a budget ceiling.
+
+  Over a limit, the endpoint returns 429 with `Retry-After: 3600`. If the limits can't be checked, it returns 503 and makes no AI call.
+- **The limits live in the database.** They're the constants at the top of `public.claim_photo_analysis()`, defined in `supabase/migrations/20261124000000_photo_analysis_quota.sql`. To change them, replace the function in a new migration with `CREATE OR REPLACE FUNCTION`; don't edit the applied migration. The endpoint calls this function with the citizen's own token, so it checks sign-in and quota in one round trip, with no service-role key.
+
+A refused description never blocks a Report: the review screen shows "description unavailable" and the Report still sends.
+
+**Rollout order** for changes to this feature:
+1. The database migration. On its own it changes nothing for users.
+2. The new mobile app build. It works with the old endpoint, which ignores the extra header.
+3. The web endpoint. Once it ships, older app builds stop getting descriptions, but their Reports still send.
+
+The mobile side needs a new EAS build, not an over-the-air update, because it adds a native module (`expo-image-manipulator`).
+
+**Recommended:** set a monthly budget on the OpenAI project in the OpenAI dashboard, as a final ceiling outside this code.
+
 ## Packages
 
 ### `@repo/types`

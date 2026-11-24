@@ -5,6 +5,7 @@
 
 import Constants from "expo-constants";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
+import { supabase } from "./supabase";
 
 export const getApiOrigin = (): string => {
   return (
@@ -49,7 +50,9 @@ async function resizeToJpegBase64(imageUri: string): Promise<string> {
 
 /**
  * Analyze an emergency photo via the AGAP API (proxies to OpenAI Vision).
- * Sends a resized JPEG copy; the original photo isn't modified.
+ * Sends a resized JPEG copy; the original photo isn't modified. The API only
+ * describes photos for signed-in users, within a quota, so this sends the
+ * current session's access token. The error messages are for logs only.
  * @param imageUri - Local file URI of the photo to analyze
  * @returns Generated description of the emergency situation
  */
@@ -57,6 +60,13 @@ export async function analyzeEmergencyPhoto(imageUri: string): Promise<string> {
   const apiOrigin = getApiOrigin();
 
   try {
+    const session = supabase
+      ? (await supabase.auth.getSession()).data.session
+      : null;
+    if (!session?.access_token) {
+      throw new Error("Not signed in");
+    }
+
     const base64Image = await resizeToJpegBase64(imageUri);
 
     const url = `${apiOrigin.replace(/\/$/, "")}/api/analyze-photo`;
@@ -64,27 +74,24 @@ export async function analyzeEmergencyPhoto(imageUri: string): Promise<string> {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
       },
       body: JSON.stringify({ image: base64Image }),
     });
 
-    const data = (await response.json().catch(() => ({}))) as {
-      description?: string;
-      error?: string;
-    };
-
     if (!response.ok) {
-      const message = data?.error || response.statusText;
-      if (response.status === 401 || response.status === 403) {
-        throw new Error(
-          "Invalid API key. Please check your OpenAI API key configuration."
-        );
+      if (response.status === 401) {
+        throw new Error("Not signed in");
       }
       if (response.status === 429) {
-        throw new Error("API rate limit exceeded. Please try again in a moment.");
+        throw new Error("Photo descriptions are paused for a while");
       }
-      throw new Error(message || `API request failed: ${response.statusText}`);
+      throw new Error(`Photo description failed (HTTP ${response.status})`);
     }
+
+    const data = (await response.json().catch(() => ({}))) as {
+      description?: string;
+    };
 
     const description = data?.description?.trim();
     if (!description) {

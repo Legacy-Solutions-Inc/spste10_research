@@ -50,20 +50,13 @@ export function useAnalyzePhoto() {
       if (timeoutId) clearTimeout(timeoutId);
       
       const errorMessage = err instanceof Error ? err.message : 'Failed to analyze photo';
-      
-      // Only log non-configuration errors (API key issues are expected if not set up)
-      const isApiKeyError = 
-        errorMessage.includes('Invalid API key') || 
-        errorMessage.includes('API key not configured') ||
-        errorMessage.includes('API key not found');
-      
-      if (!isApiKeyError && errorMessage !== 'Analysis timeout') {
-        console.error('[useAnalyzePhoto] Error:', errorMessage);
-      } else if (isApiKeyError) {
-        // Log as warning instead of error for API key issues
-        console.warn('[useAnalyzePhoto] API key issue - AI analysis unavailable');
+
+      // A missing description is expected (signed out, over the limit, offline)
+      // and the review screen shows it as unavailable, so log a warning, not an error
+      if (errorMessage !== 'Analysis timeout') {
+        console.warn('[useAnalyzePhoto] Description unavailable:', errorMessage);
       }
-      
+
       setError(errorMessage);
       
       // Don't show alert here - let the calling component handle it

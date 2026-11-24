@@ -1,11 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "@/app/api/analyze-photo/route";
-import { postRequest, stubFetch, type RequestBody } from "./helpers";
+import {
+  postRequest,
+  stubFetch,
+  type FetchResponder,
+  type RequestBody,
+} from "./helpers";
 
 const OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions";
+const SUPABASE_URL = "https://test-project.supabase.co";
+const QUOTA_CHECK_URL = `${SUPABASE_URL}/rest/v1/rpc/claim_photo_analysis`;
 
 // Contract tests for POST /api/analyze-photo: the status and body returned
-// for a given request, and what reaches the AI.
+// for a given request, and what reaches the quota check and the AI.
+
+const CITIZEN_AUTHORIZATION = "Bearer citizen-access-token";
 
 const AI_DESCRIPTION = "A deep cut above the left eyebrow.";
 
@@ -24,8 +33,17 @@ function base64File(leadingBytes: number[], sizeInBytes: number): string {
   return file.toString("base64");
 }
 
-function analyzePhoto(body: RequestBody, headers?: Record<string, string>) {
+/** Posts to the endpoint as a signed-in citizen, unless headers are given. */
+function analyzePhoto(
+  body: RequestBody,
+  headers: Record<string, string> = { Authorization: CITIZEN_AUTHORIZATION }
+) {
   return POST(postRequest("/api/analyze-photo", body, headers));
+}
+
+/** The quota function's answer, as the database API sends it. */
+function quotaCheckReturning(answer: string): FetchResponder {
+  return () => Response.json(answer);
 }
 
 /** An OpenAI chat response that describes the photo. */
@@ -34,38 +52,47 @@ function aiAnswer(description: string): Response {
 }
 
 /**
- * Stubs the AI to answer every request with the given description. Returns
- * the image URLs it was sent, one per request.
+ * An AI that answers with the given description after a delay. As with a
+ * real fetch, the request fails instead if it is cancelled first.
  */
-function stubAI(description: string): string[] {
-  const imageUrls: string[] = [];
-  stubFetch({
-    [OPENAI_CHAT_URL]: async (request) => {
-      imageUrls.push(imageUrlIn(await request.json()));
-      return aiAnswer(description);
-    },
-  });
-  return imageUrls;
+function slowAI(description: string, delayMs: number): FetchResponder {
+  return (request) =>
+    new Promise((resolve, reject) => {
+      const answerTimer = setTimeout(
+        () => resolve(aiAnswer(description)),
+        delayMs
+      );
+      request.signal.addEventListener("abort", () => {
+        clearTimeout(answerTimer);
+        reject(request.signal.reason);
+      });
+    });
 }
 
 /**
- * Stubs an AI that answers with the given description after a delay. As with
- * a real fetch, the request fails instead if it is cancelled first.
+ * Stubs the quota check and the AI. By default the quota check passes and the
+ * AI describes the photo. Returns what reached each one: the Authorization
+ * header of each quota check, and the image URL of each AI request.
  */
-function stubSlowAI(description: string, delayMs: number) {
+function stubServices({
+  quota = quotaCheckReturning("ok"),
+  ai = () => aiAnswer(AI_DESCRIPTION),
+}: { quota?: FetchResponder; ai?: FetchResponder } = {}) {
+  const reached = {
+    quotaChecks: [] as (string | null)[],
+    aiImageUrls: [] as string[],
+  };
   stubFetch({
-    [OPENAI_CHAT_URL]: (request) =>
-      new Promise((resolve, reject) => {
-        const answerTimer = setTimeout(
-          () => resolve(aiAnswer(description)),
-          delayMs
-        );
-        request.signal.addEventListener("abort", () => {
-          clearTimeout(answerTimer);
-          reject(request.signal.reason);
-        });
-      }),
+    [QUOTA_CHECK_URL]: (request) => {
+      reached.quotaChecks.push(request.headers.get("Authorization"));
+      return quota(request);
+    },
+    [OPENAI_CHAT_URL]: async (request) => {
+      reached.aiImageUrls.push(imageUrlIn(await request.clone().json()));
+      return ai(request);
+    },
   });
+  return reached;
 }
 
 /** The image URL in an OpenAI chat request body. */
@@ -81,41 +108,79 @@ function imageUrlIn(chatRequest: {
 
 beforeEach(() => {
   vi.stubEnv("OPENAI_API_KEY", "test-openai-key");
+  vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", SUPABASE_URL);
+  vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "test-anon-key");
   stubFetch(); // no responders: any outbound call fails the test
 });
 
 describe("POST /api/analyze-photo", () => {
-  it("returns 400 for a body that isn't JSON", async () => {
+  it.each([
+    ["no Authorization header", {}],
+    ["an empty bearer token", { Authorization: "Bearer " }],
+    ["another scheme", { Authorization: "Basic dXNlcjpwYXNzd29yZA==" }],
+  ])(
+    "returns 401 for %s, without checking the quota",
+    async (_label, headers) => {
+      const reached = stubServices();
+
+      const response = await analyzePhoto(
+        { json: { image: TINY_JPEG_BASE64 } },
+        headers
+      );
+
+      expect(response.status).toBe(401);
+      expect(await response.json()).toEqual({ error: expect.any(String) });
+      expect(reached).toEqual({ quotaChecks: [], aiImageUrls: [] });
+    }
+  );
+
+  it("returns 401 for a request without a token, whatever its body", async () => {
+    const response = await analyzePhoto({ raw: "not json" }, {});
+
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: expect.any(String) });
+  });
+
+  it("returns 400 for a body that isn't JSON, without checking the quota", async () => {
+    const reached = stubServices();
+
     const response = await analyzePhoto({ raw: "not json" });
 
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({ error: expect.any(String) });
+    expect(reached).toEqual({ quotaChecks: [], aiImageUrls: [] });
   });
 
   it.each([
     ["missing", {}],
     ["a number", { image: 12345 }],
     ["an object", { image: { data: "aGVsbG8=" } }],
-  ])("returns 400 when image is %s", async (_label, json) => {
-    const response = await analyzePhoto({ json });
+  ])(
+    "returns 400 when image is %s, without checking the quota",
+    async (_label, json) => {
+      const reached = stubServices();
 
-    expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({ error: expect.any(String) });
-  });
+      const response = await analyzePhoto({ json });
 
-  it("returns 413 for an image over 1.5 MB, without calling the AI", async () => {
-    const aiImageUrls = stubAI(AI_DESCRIPTION);
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({ error: expect.any(String) });
+      expect(reached).toEqual({ quotaChecks: [], aiImageUrls: [] });
+    }
+  );
+
+  it("returns 413 for an image over 1.5 MB, without checking the quota", async () => {
+    const reached = stubServices();
     const image = base64File(JPEG_SIGNATURE, 1_501_000);
 
     const response = await analyzePhoto({ json: { image } });
 
     expect(response.status).toBe(413);
     expect(await response.json()).toEqual({ error: expect.any(String) });
-    expect(aiImageUrls).toEqual([]);
+    expect(reached).toEqual({ quotaChecks: [], aiImageUrls: [] });
   });
 
   it("accepts an image just under 1.5 MB", async () => {
-    stubAI(AI_DESCRIPTION);
+    stubServices();
     const image = base64File(JPEG_SIGNATURE, 1_499_000);
 
     const response = await analyzePhoto({ json: { image } });
@@ -128,14 +193,116 @@ describe("POST /api/analyze-photo", () => {
     ["a PDF", Buffer.from("%PDF-1.7\n").toString("base64")],
     ["plain text", Buffer.from("hello, world").toString("base64")],
     ["not base64", "this is not base64!"],
-  ])("returns 415 for %s, without calling the AI", async (_label, image) => {
-    const aiImageUrls = stubAI(AI_DESCRIPTION);
+  ])(
+    "returns 415 for %s, without checking the quota",
+    async (_label, image) => {
+      const reached = stubServices();
 
-    const response = await analyzePhoto({ json: { image } });
+      const response = await analyzePhoto({ json: { image } });
 
-    expect(response.status).toBe(415);
+      expect(response.status).toBe(415);
+      expect(await response.json()).toEqual({ error: expect.any(String) });
+      expect(reached).toEqual({ quotaChecks: [], aiImageUrls: [] });
+    }
+  );
+
+  it("checks the quota with the caller's own token", async () => {
+    const reached = stubServices();
+
+    const response = await analyzePhoto({ json: { image: TINY_JPEG_BASE64 } });
+
+    expect(response.status).toBe(200);
+    expect(reached.quotaChecks).toEqual([CITIZEN_AUTHORIZATION]);
+  });
+
+  it("returns 401 without calling the AI when the database rejects the token", async () => {
+    const reached = stubServices({
+      quota: () =>
+        Response.json(
+          {
+            code: "PGRST301",
+            details: null,
+            hint: null,
+            message: "JWT expired",
+          },
+          { status: 401 }
+        ),
+    });
+
+    const response = await analyzePhoto({ json: { image: TINY_JPEG_BASE64 } });
+
+    expect(response.status).toBe(401);
     expect(await response.json()).toEqual({ error: expect.any(String) });
-    expect(aiImageUrls).toEqual([]);
+    expect(reached.aiImageUrls).toEqual([]);
+  });
+
+  it("returns 401 without calling the AI when the quota check finds no signed-in user", async () => {
+    const reached = stubServices({
+      quota: quotaCheckReturning("unauthenticated"),
+    });
+
+    const response = await analyzePhoto({ json: { image: TINY_JPEG_BASE64 } });
+
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: expect.any(String) });
+    expect(reached.aiImageUrls).toEqual([]);
+  });
+
+  it.each(["user_limit", "daily_limit"])(
+    "returns 429 with Retry-After, without calling the AI, when the quota check returns %s",
+    async (answer) => {
+      const reached = stubServices({ quota: quotaCheckReturning(answer) });
+
+      const response = await analyzePhoto({
+        json: { image: TINY_JPEG_BASE64 },
+      });
+
+      expect(response.status).toBe(429);
+      expect(response.headers.get("Retry-After")).toBe("3600");
+      expect(await response.json()).toEqual({ error: expect.any(String) });
+      expect(reached.aiImageUrls).toEqual([]);
+    }
+  );
+
+  it.each<[string, FetchResponder]>([
+    [
+      "the database can't be reached",
+      () => {
+        throw new TypeError("fetch failed");
+      },
+    ],
+    [
+      "the database returns 500",
+      () =>
+        Response.json(
+          { message: "canceling statement due to statement timeout" },
+          { status: 500 }
+        ),
+    ],
+    [
+      "the quota check returns an unexpected value",
+      quotaCheckReturning("maybe"),
+    ],
+    ["the quota check returns nothing", () => Response.json(null)],
+  ])("returns 503 without calling the AI when %s", async (_label, quota) => {
+    const reached = stubServices({ quota });
+
+    const response = await analyzePhoto({ json: { image: TINY_JPEG_BASE64 } });
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: expect.any(String) });
+    expect(reached.aiImageUrls).toEqual([]);
+  });
+
+  it("returns 503 without calling the AI when the database isn't configured", async () => {
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", undefined);
+    const reached = stubServices();
+
+    const response = await analyzePhoto({ json: { image: TINY_JPEG_BASE64 } });
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: expect.any(String) });
+    expect(reached.aiImageUrls).toEqual([]);
   });
 
   it("returns 500 when no OpenAI key is configured", async () => {
@@ -153,7 +320,7 @@ describe("POST /api/analyze-photo", () => {
   ])(
     "returns 200 with the AI's description of a %s, sent to it as %s",
     async (_label, mimeType, image) => {
-      const aiImageUrls = stubAI(AI_DESCRIPTION);
+      const reached = stubServices();
 
       const response = await analyzePhoto({ json: { image } });
 
@@ -161,7 +328,7 @@ describe("POST /api/analyze-photo", () => {
       expect(await response.json()).toEqual({
         description: AI_DESCRIPTION,
       });
-      expect(aiImageUrls).toEqual([`data:${mimeType};base64,${image}`]);
+      expect(reached.aiImageUrls).toEqual([`data:${mimeType};base64,${image}`]);
     }
   );
 
@@ -169,7 +336,7 @@ describe("POST /api/analyze-photo", () => {
     ["data:image/jpeg;base64,"],
     ["data:image/png;base64,"], // mislabelled: the bytes decide the type
   ])("accepts an image with a leading %s prefix", async (prefix) => {
-    const aiImageUrls = stubAI(AI_DESCRIPTION);
+    const reached = stubServices();
 
     const response = await analyzePhoto({
       json: { image: prefix + TINY_JPEG_BASE64 },
@@ -179,14 +346,16 @@ describe("POST /api/analyze-photo", () => {
     expect(await response.json()).toEqual({
       description: AI_DESCRIPTION,
     });
-    expect(aiImageUrls).toEqual([`data:image/jpeg;base64,${TINY_JPEG_BASE64}`]);
+    expect(reached.aiImageUrls).toEqual([
+      `data:image/jpeg;base64,${TINY_JPEG_BASE64}`,
+    ]);
   });
 
   it.each([
     ["empty content", { choices: [{ message: { content: "" } }] }],
     ["no choices", { choices: [] }],
   ])("returns 502 when the AI response has %s", async (_label, aiBody) => {
-    stubFetch({ [OPENAI_CHAT_URL]: () => Response.json(aiBody) });
+    stubServices({ ai: () => Response.json(aiBody) });
 
     const response = await analyzePhoto({ json: { image: TINY_JPEG_BASE64 } });
 
@@ -210,8 +379,8 @@ describe("POST /api/analyze-photo", () => {
   ])(
     "returns 502 without the provider's message when the AI returns %s",
     async (providerStatus, providerMessage) => {
-      stubFetch({
-        [OPENAI_CHAT_URL]: () =>
+      stubServices({
+        ai: () =>
           Response.json(
             { error: { message: providerMessage } },
             { status: providerStatus }
@@ -231,8 +400,8 @@ describe("POST /api/analyze-photo", () => {
   );
 
   it("returns 502 without the cause when the AI can't be reached", async () => {
-    stubFetch({
-      [OPENAI_CHAT_URL]: () => {
+    stubServices({
+      ai: () => {
         throw new TypeError("fetch failed");
       },
     });
@@ -247,7 +416,7 @@ describe("POST /api/analyze-photo", () => {
 
   it("returns 502 when the AI hasn't answered after 25 seconds", async () => {
     vi.useFakeTimers();
-    stubSlowAI(AI_DESCRIPTION, 30_000);
+    stubServices({ ai: slowAI(AI_DESCRIPTION, 30_000) });
 
     const pendingResponse = analyzePhoto({
       json: { image: TINY_JPEG_BASE64 },
@@ -261,7 +430,7 @@ describe("POST /api/analyze-photo", () => {
 
   it("returns 200 with the description when the AI answers just before 25 seconds", async () => {
     vi.useFakeTimers();
-    stubSlowAI(AI_DESCRIPTION, 24_999);
+    stubServices({ ai: slowAI(AI_DESCRIPTION, 24_999) });
 
     const pendingResponse = analyzePhoto({
       json: { image: TINY_JPEG_BASE64 },

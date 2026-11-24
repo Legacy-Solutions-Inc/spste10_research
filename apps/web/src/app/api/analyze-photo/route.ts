@@ -1,9 +1,12 @@
 /**
  * API route to proxy OpenAI Vision requests.
  * Keeps the API key server-side (never exposed to client).
+ * Only signed-in app users can use it, within the quota that the database
+ * function claim_photo_analysis() enforces.
  * See: https://docs.expo.dev/router/web/api-routes/
  */
 
+import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 
 // Run time asked of the host, in seconds: the AI timeout plus headroom, so a
@@ -12,6 +15,22 @@ export const maxDuration = 30;
 
 // How long to wait for the AI before cancelling the request.
 const AI_TIMEOUT_MS = 25_000;
+
+// The Authorization header a signed-in caller sends: their Supabase access token.
+const BEARER_AUTHORIZATION = /^Bearer\s+\S+$/i;
+
+// How long a caller over a quota limit is asked to wait: the per-person window.
+const QUOTA_RETRY_AFTER_SECONDS = 3600;
+
+// The answers claim_photo_analysis() can give.
+const QUOTA_ANSWERS = [
+  "ok",
+  "unauthenticated",
+  "user_limit",
+  "daily_limit",
+] as const;
+
+type QuotaAnswer = (typeof QUOTA_ANSWERS)[number];
 
 const SYSTEM_PROMPT = `You are an emergency medical responder analyzing a photo of an emergency situation. Your task is to provide a clear, professional description that will help first responders understand the situation quickly.
 
@@ -88,7 +107,62 @@ function aiCallFailed() {
   );
 }
 
+/** The response when the caller has no valid session. */
+function signInRequired() {
+  return NextResponse.json({ error: "Sign-in required" }, { status: 401 });
+}
+
+/**
+ * Claims one photo description from the caller's quota, acting as the caller.
+ * The database API rejects a forged or expired token before the quota function
+ * runs, so a rejected token counts as "unauthenticated". Returns null if the
+ * quota couldn't be checked. Never logs the token.
+ */
+async function claimPhotoAnalysis(
+  authorization: string
+): Promise<QuotaAnswer | null> {
+  try {
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        global: { headers: { Authorization: authorization } },
+        auth: { persistSession: false, autoRefreshToken: false },
+      }
+    );
+    // @ts-ignore - RPC isn't in the generated types
+    const { data, error, status } = await supabase.rpc("claim_photo_analysis");
+    if (status === 401) {
+      console.warn(
+        `[API analyze-photo] Quota check rejected the token: ${error?.message}`
+      );
+      return "unauthenticated";
+    }
+    if (error) {
+      console.error(
+        `[API analyze-photo] Quota check failed (${status}): ${error.message}`
+      );
+      return null;
+    }
+    if (!QUOTA_ANSWERS.includes(data)) {
+      console.error(
+        `[API analyze-photo] Quota check gave an unexpected answer: ${JSON.stringify(data)}`
+      );
+      return null;
+    }
+    return data;
+  } catch (error) {
+    console.error("[API analyze-photo] Quota check failed:", error);
+    return null;
+  }
+}
+
 export async function POST(request: NextRequest) {
+  const authorization = request.headers.get("Authorization");
+  if (!authorization || !BEARER_AUTHORIZATION.test(authorization)) {
+    return signInRequired();
+  }
+
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
@@ -125,6 +199,28 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { error: "Image must be a JPEG or PNG" },
       { status: 415 }
+    );
+  }
+
+  // Checked after validation, so malformed requests never use up quota. If
+  // the quota can't be checked, no AI call is made.
+  const quota = await claimPhotoAnalysis(authorization);
+  if (quota === "unauthenticated") {
+    return signInRequired();
+  }
+  if (quota === "user_limit" || quota === "daily_limit") {
+    return NextResponse.json(
+      { error: "Too many photo descriptions; try again later" },
+      {
+        status: 429,
+        headers: { "Retry-After": String(QUOTA_RETRY_AFTER_SECONDS) },
+      }
+    );
+  }
+  if (quota !== "ok") {
+    return NextResponse.json(
+      { error: "Photo descriptions are temporarily unavailable" },
+      { status: 503 }
     );
   }
 
