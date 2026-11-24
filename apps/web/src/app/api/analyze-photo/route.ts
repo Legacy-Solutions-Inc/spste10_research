@@ -36,6 +36,39 @@ Guidelines for your analysis:
 
 const USER_PROMPT = `Please analyze this emergency photo and provide a professional description that will help first responders understand the situation. Focus on visible injuries, symptoms, location, severity, and environmental context. Keep the description concise (2-4 sentences, 100-200 words) and use appropriate medical/emergency terminology.`;
 
+// An optional "data:<type>;base64," prefix on the image, as in a data URL.
+const DATA_URL_PREFIX = /^data:[^,]*;base64,/;
+
+// Largest image accepted, in base64 characters: about 1.5 MB once decoded.
+// The app sends a resized copy, well under this limit.
+const MAX_IMAGE_BASE64_LENGTH = 2_000_000;
+
+// The image types accepted, by the bytes each file format starts with.
+const IMAGE_SIGNATURES = [
+  { mimeType: "image/jpeg", bytes: [0xff, 0xd8, 0xff] },
+  {
+    mimeType: "image/png",
+    bytes: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
+  },
+] as const;
+
+type ImageMimeType = (typeof IMAGE_SIGNATURES)[number]["mimeType"];
+
+/** The JPEG or PNG mime type of base64 image data, judged by its first bytes. */
+function detectImageType(base64Image: string): ImageMimeType | null {
+  let leadingBytes: string;
+  try {
+    // 12 base64 characters decode to 9 bytes, enough for every signature.
+    leadingBytes = atob(base64Image.slice(0, 12));
+  } catch {
+    return null;
+  }
+  const match = IMAGE_SIGNATURES.find(({ bytes }) =>
+    bytes.every((byte, i) => leadingBytes.charCodeAt(i) === byte)
+  );
+  return match?.mimeType ?? null;
+}
+
 export async function POST(request: NextRequest) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
@@ -55,11 +88,24 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const base64Image = body?.image;
-  if (!base64Image || typeof base64Image !== "string") {
+  const image = body?.image;
+  if (!image || typeof image !== "string") {
     return NextResponse.json(
       { error: "Missing or invalid 'image' field (base64 string)" },
       { status: 400 }
+    );
+  }
+  const base64Image = image.replace(DATA_URL_PREFIX, "");
+
+  if (base64Image.length > MAX_IMAGE_BASE64_LENGTH) {
+    return NextResponse.json({ error: "Image is too large" }, { status: 413 });
+  }
+
+  const mimeType = detectImageType(base64Image);
+  if (!mimeType) {
+    return NextResponse.json(
+      { error: "Image must be a JPEG or PNG" },
+      { status: 415 }
     );
   }
 
@@ -81,7 +127,7 @@ export async function POST(request: NextRequest) {
               {
                 type: "image_url",
                 image_url: {
-                  url: `data:image/jpeg;base64,${base64Image}`,
+                  url: `data:${mimeType};base64,${base64Image}`,
                 },
               },
             ],

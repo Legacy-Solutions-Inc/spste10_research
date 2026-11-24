@@ -4,6 +4,7 @@
  */
 
 import Constants from "expo-constants";
+import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 
 export const getApiOrigin = (): string => {
   return (
@@ -13,46 +14,42 @@ export const getApiOrigin = (): string => {
   );
 };
 
+// The copy of the photo sent for a description: at most 1024 px wide, as a
+// JPEG at 70% quality (typically 150-300 KB). The photo stored with the
+// Report is uploaded separately and keeps its full quality.
+const DESCRIPTION_PHOTO_MAX_WIDTH = 1024;
+const DESCRIPTION_PHOTO_JPEG_QUALITY = 0.7;
+
 /**
- * Convert image URI to base64 string
+ * Makes a small JPEG copy of a photo and returns it as base64. The photo is
+ * downsampled while it is decoded, so a high-resolution capture is never
+ * loaded into memory at full size, and the base64 is encoded natively.
  * @param imageUri - Local file URI from camera
- * @returns Base64 encoded image string
+ * @returns Base64 encoded JPEG of the resized copy
  */
-async function imageUriToBase64(imageUri: string): Promise<string> {
+async function resizeToJpegBase64(imageUri: string): Promise<string> {
   try {
-    const response = await fetch(imageUri);
-
-    let arrayBuffer: ArrayBuffer;
-    if (typeof response.arrayBuffer === "function") {
-      arrayBuffer = await response.arrayBuffer();
-    } else {
-      arrayBuffer = await new Promise<ArrayBuffer>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open("GET", imageUri, true);
-        xhr.responseType = "arraybuffer";
-        xhr.onload = () =>
-          xhr.status === 200
-            ? resolve(xhr.response)
-            : reject(new Error(`Failed to load file: ${xhr.status}`));
-        xhr.onerror = () => reject(new Error("Network error loading file"));
-        xhr.send();
-      });
+    const image = await ImageManipulator.manipulate(imageUri, {
+      maxWidth: DESCRIPTION_PHOTO_MAX_WIDTH,
+    }).renderAsync();
+    const { base64 } = await image.saveAsync({
+      format: SaveFormat.JPEG,
+      compress: DESCRIPTION_PHOTO_JPEG_QUALITY,
+      base64: true,
+    });
+    if (!base64) {
+      throw new Error("The image manipulator returned no base64 data");
     }
-
-    const bytes = new Uint8Array(arrayBuffer);
-    let binary = "";
-    for (let i = 0; i < bytes.byteLength; i++) {
-      binary += String.fromCharCode(bytes[i]);
-    }
-    return btoa(binary);
+    return base64;
   } catch (error) {
-    console.error("[OpenAI] Error converting image to base64:", error);
+    console.error("[OpenAI] Error resizing image:", error);
     throw new Error("Failed to process image");
   }
 }
 
 /**
- * Analyze an emergency photo via the AGAP API (proxies to OpenAI Vision)
+ * Analyze an emergency photo via the AGAP API (proxies to OpenAI Vision).
+ * Sends a resized JPEG copy; the original photo isn't modified.
  * @param imageUri - Local file URI of the photo to analyze
  * @returns Generated description of the emergency situation
  */
@@ -60,7 +57,7 @@ export async function analyzeEmergencyPhoto(imageUri: string): Promise<string> {
   const apiOrigin = getApiOrigin();
 
   try {
-    const base64Image = await imageUriToBase64(imageUri);
+    const base64Image = await resizeToJpegBase64(imageUri);
 
     const url = `${apiOrigin.replace(/\/$/, "")}/api/analyze-photo`;
     const response = await fetch(url, {
