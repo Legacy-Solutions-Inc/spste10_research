@@ -186,8 +186,8 @@ Tests mustn't assert on internal helpers, call order inside the handler, or tabl
 
 ## Out of Scope
 
-- Push notifications, the device QA sweep, and showing citizen notes or emergency contacts on the web dashboard.
-- Changing the AI model, prompts, description length or image detail level.
+- Push notifications, the device QA sweep, and showing emergency contacts on the web dashboard. (Showing the Citizen note is now covered by the addendum below.)
+- Changing the AI model, description length or image detail level. (The body-side rule in the AI instructions is covered by the addendum below.)
 - Describing photos for Emergency Alerts. Only Reports carry photos.
 - An admin screen for viewing or changing limits, or per-office or per-role limits.
 - Revoking access for a specific abusive account beyond the existing account controls.
@@ -207,3 +207,48 @@ Tests mustn't assert on internal helpers, call order inside the handler, or tabl
 
 **Database**
 - The migration should be applied to the live Supabase project only after Seam 2 passes, as with the previous migrations.
+
+## Addendum (2026-11-25): Body side and the Citizen note
+
+Agreed in a grilling session after tickets 01–04. The terms Body side, Citizen note and Photo description are defined in `CONTEXT.md`.
+
+**Problem**
+- The AI instructions ask for locations like "left arm" but never say whose left. The citizen usually faces the injured person, so that person's left arm appears on the right of the photo.
+- A close-up of one arm can't show which arm it is, and the AI can't tell whether the injured person or a bystander took the photo. Today it guesses a side and states it as fact. Responders see the photo description as-is, so a wrong side is worse than none.
+- The citizen can tap chips ("Unconscious", "Heavy bleeding", "Not breathing", "Vehicle accident", "Fire") and type a note on the review screen. Both are saved with the Report, but the web dashboard never shows them, so responders never see "Not breathing" or a typed "it's his left arm".
+- The photo pipeline is not the cause. Report photos come only from the back camera, nothing mirrors them, and resizing never flips them.
+
+**Decisions**
+1. **Body side is the injured person's own side**, never the side it appears on in the photo.
+2. **The AI names a side only when it can see which way the person is facing**: for example, their face or the front of their body is visible and the injured part is clearly attached. The instructions state the flip outright: a person facing the camera has their left on the right of the image.
+3. **Otherwise the photo description says the side can't be told from the photo**, for example "Deep cut on one forearm; which arm can't be told from the photo." This covers every body part with a side (arm, leg, hand, foot, eye, ear, side of the head or chest). Injuries on both sides are described as "both".
+4. **The model stays gpt-4o-mini.** The photo check decides. If it gets the facing-camera cases wrong, the owner decides on a stronger model with that evidence.
+5. **The Citizen note is how a citizen tells responders the side** when the photo can't. No new field or picker is added to the app.
+6. **The dashboard shows the Citizen note ahead of the AI:**
+   - Detail panel order: Photo, Citizen note, AI photo description, Reported by, Timeline.
+   - Citizen note section: chips as badges, typed text below; "No note was added." when empty.
+   - The "Description" heading becomes "AI photo description"; its empty text becomes "No photo description."
+   - Queue and History rows show the Citizen note when there is one, and fall back to the photo description, then to "From {name}" or "Photo report".
+7. **Reading the Citizen note:** the app stores the chips joined with ", " on the first line, then the typed text (which can span several lines). The dashboard treats the first line as chips only when every item on it is one of the five known chip labels; otherwise the whole note is typed text. If the app later adds a chip, the dashboard shows it as plain text, which is harmless.
+8. **No database or mobile change.** The dashboard already loads every column of a Report, including the note.
+9. **Branch and release:** everything goes on `fix/photo-analysis-auth` and ships in the same pull request and release as tickets 01–04.
+
+**Testing**
+- **Dashboard:** Vitest tests on plain functions in the web test suite: reading the Citizen note into chips and typed text, and choosing the one-line row summary. No component-rendering tools are added.
+- **AI instructions:** the existing endpoint contract tests must stay green. They don't judge description quality.
+- **Photo check (manual, real AI calls):** the owner stages five photos of a known marked arm, and each runs twice through the local endpoint with the test citizen account. It passes only if all ten answers match:
+
+  | Photo | Expected |
+  |---|---|
+  | a. Close-up of just the marked arm | Side can't be told |
+  | b. Someone else photographs the owner facing the camera, mark on the owner's left arm | Left |
+  | c. The same, mark on the owner's right arm | Right |
+  | d. The owner photographs their own marked forearm | Side can't be told |
+  | e. A scene with no person | No side mentioned |
+
+  The photos stay outside the repo. The usage records the check creates are deleted afterwards.
+
+**Out of scope**
+- A body-side picker or any other change to the citizen's review screen, including its "AI description" heading.
+- Notes on SOS alerts (only Reports have a Citizen note).
+- Switching the AI model before the photo check has run.

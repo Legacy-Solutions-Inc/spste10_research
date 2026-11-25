@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { IncidentTypeIcon, WaitTimer, personFacts, personName } from "@/components/incident/IncidentBits";
+import { reportRowSummary } from "@/lib/citizenNote";
 import { formatElapsed } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { Incident } from "@/types/incident";
@@ -69,7 +70,7 @@ function IncidentRow({
   const secondary =
     incident.type === "alert"
       ? [name, ...facts].filter(Boolean).join(", ") || "No personal details"
-      : incident.description || (incident.reporter_name ? `From ${incident.reporter_name}` : "Photo report");
+      : reportRowSummary(incident);
 
   return (
     <li>

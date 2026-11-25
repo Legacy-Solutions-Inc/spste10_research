@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { IncidentTypeBadge, WaitTimer, personFacts, personName } from "@/components/incident/IncidentBits";
 import { useIncidentImage } from "@/hooks/useIncidentImage";
+import { readCitizenNote } from "@/lib/citizenNote";
 import { directionsUrl, formatCoordinates, formatDateTime, formatElapsed } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { Incident } from "@/types/incident";
@@ -77,6 +78,30 @@ function ReportPhoto({ imageUrl }: { imageUrl: string | null | undefined }) {
       />
       <span className="sr-only">Open full-size photo in a new tab</span>
     </a>
+  );
+}
+
+/** What the citizen tapped and typed, in their own words: chips as badges, typed text below. */
+function CitizenNoteContent({ stored }: { stored: string | null | undefined }) {
+  const note = readCitizenNote(stored);
+  if (!note) {
+    return <p className="text-sm text-muted-foreground">No note was added.</p>;
+  }
+  return (
+    <div className="space-y-2">
+      {note.chips.length > 0 && (
+        <ul className="flex flex-wrap gap-1.5">
+          {note.chips.map((chip, i) => (
+            <li key={`${i}-${chip}`}>
+              <Badge variant="outline" className="text-13">
+                {chip}
+              </Badge>
+            </li>
+          ))}
+        </ul>
+      )}
+      {note.text && <p className="max-w-prose whitespace-pre-line text-sm leading-relaxed text-foreground">{note.text}</p>}
+    </div>
   );
 }
 
@@ -180,9 +205,12 @@ export function IncidentDetail({
             <Section title="Photo">
               <ReportPhoto imageUrl={incident.image_url} />
             </Section>
-            <Section title="Description">
+            <Section title="Citizen note">
+              <CitizenNoteContent stored={incident.citizen_note} />
+            </Section>
+            <Section title="AI photo description">
               <p className="max-w-prose whitespace-pre-line text-sm leading-relaxed text-foreground">
-                {incident.description || <span className="text-muted-foreground">No description was added.</span>}
+                {incident.description || <span className="text-muted-foreground">No photo description.</span>}
               </p>
             </Section>
             {incident.reporter_name && (

@@ -14,6 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { useFetchHistory, type HistoryEntry } from "@/hooks/useFetchHistory";
 import { useNow } from "@/hooks/useNow";
+import { reportRowSummary } from "@/lib/citizenNote";
 import { formatDayLabel, formatDuration, formatTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -73,7 +74,7 @@ function HistoryRow({ entry, onOpen }: { entry: HistoryEntry; onOpen: () => void
   const secondary =
     incident.type === "alert"
       ? [who, ...personFacts(incident)].filter(Boolean).join(", ") || "No personal details"
-      : incident.description || (who ? `From ${who}` : "Photo report");
+      : reportRowSummary(incident);
 
   return (
     <li>

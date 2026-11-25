@@ -29,7 +29,8 @@ export interface ReportRow {
   longitude: number;
   location_name: string | null;
   image_url: string | null;
-  description: string | null;
+  description: string | null; // Photo description, written by AI
+  user_note: string | null; // Citizen note: chips on the first line, then typed text
   created_at: string;
   updated_at: string;
   canceled_at: string | null;
@@ -66,7 +67,8 @@ export interface Incident {
   victim_sex?: string | null;
   // Report-specific fields
   image_url?: string | null;
-  description?: string | null;
+  description?: string | null; // Photo description, written by AI
+  citizen_note?: string | null; // As stored; read it with readCitizenNote()
   // Assignment info
   assignment?: ResponderAssignment | null;
   isAssigned?: boolean;
@@ -135,6 +137,7 @@ export function reportToIncident(
     user_id: report.user_id,
     image_url: report.image_url,
     description: report.description,
+    citizen_note: report.user_note,
     assignment: assignment || null,
     isAssigned: !!assignment,
     assignmentStatus: assignment?.response_status,
